@@ -35,7 +35,7 @@ final class Travel_TriviaUITests: XCTestCase {
 
         // Peek at the scoreboard dropdown once, then close it
         scoreboardToggle.tap()
-        XCTAssertTrue(app.otherElements["scoreboard-panel"].waitForExistence(timeout: 3),
+        XCTAssertTrue(app.descendants(matching: .any)["scoreboard-panel"].firstMatch.waitForExistence(timeout: 3),
                       "Scoreboard dropdown should open")
         scoreboardToggle.tap()
 

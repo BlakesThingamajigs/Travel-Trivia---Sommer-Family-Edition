@@ -30,6 +30,11 @@ struct RootView: View {
             }
         }
         .animation(.spring(response: 0.55, dampingFraction: 0.72), value: engine.phase)
+        .onAppear {
+            #if DEBUG
+            engine.debugApplyLaunchArguments(ProcessInfo.processInfo.arguments)
+            #endif
+        }
     }
 }
 

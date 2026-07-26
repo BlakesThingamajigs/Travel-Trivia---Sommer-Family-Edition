@@ -25,6 +25,9 @@ struct QuestionView: View {
             if let question = engine.currentQuestion {
                 RiddleCard(question: question)
 
+                Spacer(minLength: 8)
+                    .frame(maxHeight: 34)
+
                 AvatarStrip()
 
                 if userIsOut {
@@ -33,10 +36,13 @@ struct QuestionView: View {
                         .transition(.scale.combined(with: .opacity))
                 }
 
-                AnswerGrid(question: question)
-            }
+                Spacer(minLength: 8)
 
-            Spacer(minLength: 0)
+                AnswerGrid(question: question)
+                    .padding(.bottom, 16)
+            } else {
+                Spacer(minLength: 0)
+            }
         }
         .padding(.horizontal, 16)
         .shake(trigger: engine.shakeTrigger)
@@ -169,7 +175,7 @@ private struct PlayerBubble: View {
         VStack(spacing: 4) {
             AvatarHead(color: TT.avatarColors[player.colorIndex % TT.avatarColors.count],
                        expression: expression,
-                       size: 46)
+                       size: 56)
                 .reactionBounce(trigger: player.lastAnswerCorrect == true ? engine.reactionTrigger : 0)
                 .shake(trigger: player.lastAnswerCorrect == false ? engine.reactionTrigger : 0)
                 .overlay(alignment: .topTrailing) {
@@ -185,7 +191,7 @@ private struct PlayerBubble: View {
                 .lineLimit(1)
             StrikePips(player: player)
         }
-        .frame(width: 64)
+        .frame(width: 72)
         .opacity(player.isOut ? 0.55 : 1)
         .saturation(player.isOut ? 0.25 : 1)
         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: player.isOut)
@@ -259,7 +265,7 @@ private struct AnswerButton: View {
                 .minimumScaleFactor(0.6)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 8)
-                .frame(maxWidth: .infinity, minHeight: 62)
+                .frame(maxWidth: .infinity, minHeight: 82)
                 .sticker(RoundedRectangle(cornerRadius: 18), fill: buttonColor)
                 .overlay {
                     if isRevealing && isCorrectOption {

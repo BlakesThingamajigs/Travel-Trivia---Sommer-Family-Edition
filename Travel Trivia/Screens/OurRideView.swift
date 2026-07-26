@@ -15,6 +15,7 @@ struct OurRideView: View {
         VStack(spacing: 8) {
             StickerText(text: "OUR RIDE", size: 44)
                 .padding(.top, 8)
+                .zIndex(1)
             StickerChip(text: "Pick your seats, gang!", textSize: 14)
 
             Spacer(minLength: 12)
@@ -36,6 +37,9 @@ struct OurRideView: View {
             .padding(.bottom, 18)
         }
         .padding(.horizontal, 20)
+        .background {
+            RoadStrip(width: 384)
+        }
     }
 }
 
@@ -47,7 +51,6 @@ private struct CarTopDownView: View {
 
     var body: some View {
         ZStack {
-            RoadStrip(width: carWidth + 84)
             wheels
             carBody
             seats
@@ -211,7 +214,7 @@ private struct RoadStrip: View {
                 .overlay(alignment: .trailing) { Rectangle().fill(TT.ink).frame(width: 5) }
             // Dashed center line
             VStack(spacing: 26) {
-                ForEach(0..<8, id: \.self) { _ in
+                ForEach(0..<14, id: \.self) { _ in
                     RoundedRectangle(cornerRadius: 3)
                         .fill(TT.sunshine)
                         .frame(width: 10, height: 42)

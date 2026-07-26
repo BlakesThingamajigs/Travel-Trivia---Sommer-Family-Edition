@@ -213,6 +213,22 @@ final class GameEngine {
     func waitForPendingAdvance() async {
         await advanceTask?.value
     }
+
+    #if DEBUG
+    /// Screenshot/dev shortcuts driven by launch arguments (see RootView).
+    func debugApplyLaunchArguments(_ arguments: [String]) {
+        if arguments.contains("-TTAutoStart") {
+            joinOpenSeat()
+            startGame(seed: 42)
+        }
+        if arguments.contains("-TTVictory") {
+            joinOpenSeat()
+            startGame(seed: 42)
+            userPlayer?.score = 11
+            finishRound()
+        }
+    }
+    #endif
 }
 
 /// Deterministic generator so tests (and repeatable demos) can fix shuffles.

@@ -9,28 +9,37 @@ import Testing
 import SwiftData
 @testable import Travel_Trivia
 
+/// Keeps the ModelContainer alive for the test's duration — the engine only
+/// holds the context, and a deallocated container traps SwiftData on the
+/// next model mutation.
 @MainActor
-private func makeEngine() throws -> GameEngine {
-    let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try ModelContainer(for: Player.self, configurations: configuration)
-    let engine = GameEngine(context: container.mainContext)
-    engine.revealDuration = .zero
-    engine.spectatorAnswerDelay = .zero
-    return engine
+private struct EngineHarness {
+    let container: ModelContainer
+    let engine: GameEngine
+
+    init() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        container = try ModelContainer(for: Player.self, configurations: configuration)
+        engine = GameEngine(context: container.mainContext)
+        engine.revealDuration = .zero
+        engine.spectatorAnswerDelay = .zero
+    }
 }
 
 @MainActor
 struct GameEngineTests {
 
     @Test func initialPartyHasThreePlayersAndAnOpenSeat() throws {
-        let engine = try makeEngine()
+        let harness = try EngineHarness()
+        let engine = harness.engine
         #expect(engine.players.count == 3)
         #expect(engine.openSeatIndex == 3)
         #expect(engine.userPlayer?.name == "Blake")
     }
 
     @Test func joiningOpenSeatAddsFourthPlayer() throws {
-        let engine = try makeEngine()
+        let harness = try EngineHarness()
+        let engine = harness.engine
         engine.joinOpenSeat()
         #expect(engine.players.count == 4)
         #expect(engine.openSeatIndex == nil)
@@ -40,7 +49,8 @@ struct GameEngineTests {
     }
 
     @Test func startGameDealsSixteenShuffledQuestions() throws {
-        let engine = try makeEngine()
+        let harness = try EngineHarness()
+        let engine = harness.engine
         engine.startGame(seed: 7)
         #expect(engine.phase == .playing)
         #expect(engine.questions.count == 16)
@@ -51,7 +61,8 @@ struct GameEngineTests {
     }
 
     @Test func correctAnswerScoresAPoint() async throws {
-        let engine = try makeEngine()
+        let harness = try EngineHarness()
+        let engine = harness.engine
         engine.botRoll = { 0.99 }  // all bots miss
         engine.startGame(seed: 7)
         let question = try #require(engine.currentQuestion)
@@ -62,7 +73,8 @@ struct GameEngineTests {
     }
 
     @Test func threeWrongAnswersEliminateThePlayer() async throws {
-        let engine = try makeEngine()
+        let harness = try EngineHarness()
+        let engine = harness.engine
         engine.botRoll = { 0.0 }  // all bots answer correctly — nobody else strikes out
         engine.startGame(seed: 7)
 
@@ -81,7 +93,8 @@ struct GameEngineTests {
     }
 
     @Test func lastPlayerStandingWinsImmediately() async throws {
-        let engine = try makeEngine()
+        let harness = try EngineHarness()
+        let engine = harness.engine
         engine.botRoll = { 0.99 }  // both bots miss every question
         engine.startGame(seed: 7)
 
@@ -98,7 +111,8 @@ struct GameEngineTests {
     }
 
     @Test func exhaustingAllQuestionsCrownsHighestScorer() async throws {
-        let engine = try makeEngine()
+        let harness = try EngineHarness()
+        let engine = harness.engine
         engine.botRoll = { 0.4 }  // bots with accuracy > 0.4 always correct, others always wrong
         engine.startGame(seed: 7)
 
@@ -117,7 +131,8 @@ struct GameEngineTests {
     }
 
     @Test func backToRideResetsForANewRound() async throws {
-        let engine = try makeEngine()
+        let harness = try EngineHarness()
+        let engine = harness.engine
         engine.botRoll = { 0.99 }
         engine.startGame(seed: 7)
         let question = try #require(engine.currentQuestion)
@@ -131,6 +146,7 @@ struct GameEngineTests {
     }
 }
 
+@MainActor
 struct SeedContentTests {
 
     @Test func seedPackHasSixteenWellFormedRiddles() {

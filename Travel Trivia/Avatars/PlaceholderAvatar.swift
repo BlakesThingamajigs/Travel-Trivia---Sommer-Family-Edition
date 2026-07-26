@@ -38,14 +38,15 @@ struct AvatarHead: View {
     }
 
     private var face: some View {
-        VStack(spacing: size * 0.08) {
+        ZStack {
             HStack(spacing: size * 0.22) {
                 eye
                 eye
             }
+            .offset(y: -size * 0.08)
             mouth
+                .offset(y: size * 0.16)
         }
-        .offset(y: size * 0.05)
     }
 
     private var eye: some View {
@@ -63,26 +64,38 @@ struct AvatarHead: View {
     private var mouth: some View {
         switch expression {
         case .happy:
-            Circle()
-                .trim(from: 0.08, to: 0.42)
+            MouthShape(curve: 1)
                 .stroke(TT.ink, style: StrokeStyle(lineWidth: size * 0.06, lineCap: .round))
-                .frame(width: size * 0.4, height: size * 0.4)
-                .frame(height: size * 0.18, alignment: .top)
+                .frame(width: size * 0.34, height: size * 0.14)
         case .sad:
-            Circle()
-                .trim(from: 0.58, to: 0.92)
+            MouthShape(curve: -1)
                 .stroke(TT.ink, style: StrokeStyle(lineWidth: size * 0.06, lineCap: .round))
-                .frame(width: size * 0.36, height: size * 0.36)
-                .frame(height: size * 0.18, alignment: .bottom)
+                .frame(width: size * 0.3, height: size * 0.12)
         case .wow:
             Circle()
                 .fill(TT.ink)
                 .frame(width: size * 0.16, height: size * 0.16)
         case .idle:
-            Capsule()
-                .fill(TT.ink)
-                .frame(width: size * 0.26, height: size * 0.055)
+            MouthShape(curve: 0.35)
+                .stroke(TT.ink, style: StrokeStyle(lineWidth: size * 0.055, lineCap: .round))
+                .frame(width: size * 0.26, height: size * 0.08)
         }
+    }
+}
+
+/// Quad-curve mouth: positive curve smiles, negative frowns, 0 is flat.
+nonisolated struct MouthShape: Shape {
+    var curve: CGFloat
+
+    nonisolated func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let baseY = curve >= 0 ? rect.minY + rect.height * 0.15 : rect.maxY - rect.height * 0.15
+        path.move(to: CGPoint(x: rect.minX, y: baseY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: baseY),
+            control: CGPoint(x: rect.midX, y: baseY + curve * rect.height * 1.7)
+        )
+        return path
     }
 }
 

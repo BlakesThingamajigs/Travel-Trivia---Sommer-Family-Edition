@@ -28,6 +28,7 @@ struct ScoreboardDropdown: View {
         }
         .padding(14)
         .sticker(RoundedRectangle(cornerRadius: 22), fill: TT.paper, drop: CGSize(width: 0, height: 6))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("scoreboard-panel")
     }
 }

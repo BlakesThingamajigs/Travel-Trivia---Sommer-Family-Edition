@@ -26,8 +26,9 @@ enum TT {
 
     /// Fixed color-per-grid-position for the 6 answer buttons. Order never
     /// changes between questions: the driver calls answers out by color +
-    /// position, so both must stay unambiguous.
-    static let answerColors: [Color] = [sunshine, bubblegum, lime, tangerine, grape, sky]
+    /// position, so both must stay unambiguous — which also rules out sky
+    /// blue here (it would vanish into the background).
+    static let answerColors: [Color] = [sunshine, bubblegum, lime, tangerine, grape, paper]
 
     static let avatarColors: [Color] = [tangerine, grape, lime, bubblegum, sunshine, cherry]
 

@@ -53,10 +53,13 @@ struct VictoryView: View {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.32).repeatForever(autoreverses: true)) {
                 bouncing = true
             }
-            // Keep the party going: a fresh burst every 1.4 s
+            // Keep the party going: a fresh burst every 1.2 s. The short
+            // initial delay lets the confetti canvas mount before the first
+            // trigger lands.
             while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(0.25))
                 confettiTick += 1
-                try? await Task.sleep(for: .seconds(1.4))
+                try? await Task.sleep(for: .seconds(0.95))
             }
         }
     }
