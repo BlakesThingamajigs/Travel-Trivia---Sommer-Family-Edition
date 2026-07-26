@@ -2,7 +2,8 @@
 //  Travel_TriviaUITests.swift
 //  Travel TriviaUITests
 //
-//  Created by Blake Sommer on 7/26/26.
+//  Drives the full vertical slice end to end: Our Ride → join the open
+//  seat → play Three Strikes through the Riddle Realm questions → victory.
 //
 
 import XCTest
@@ -10,34 +11,48 @@ import XCTest
 final class Travel_TriviaUITests: XCTestCase {
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
-    }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testFullRoundFromSeatPickerToVictory() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // XCUIAutomation Documentation
-        // https://developer.apple.com/documentation/xcuiautomation
-    }
+        // Our Ride: the open seat joins the 4th player
+        let openSeat = app.buttons["seat-open"]
+        XCTAssertTrue(openSeat.waitForExistence(timeout: 5), "Open seat should be visible on Our Ride")
+        openSeat.tap()
+        XCTAssertFalse(openSeat.waitForExistence(timeout: 2), "Open seat should be filled after joining")
 
-    @MainActor
-    func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+        app.buttons["start-trip"].tap()
+
+        // Question loop: answer whenever the grid is interactive; the round
+        // ends by elimination or after all 16 questions.
+        let victoryTitle = app.staticTexts["victory-title"]
+        let scoreboardToggle = app.buttons["scoreboard-toggle"]
+        XCTAssertTrue(scoreboardToggle.waitForExistence(timeout: 5), "Question screen should appear")
+
+        // Peek at the scoreboard dropdown once, then close it
+        scoreboardToggle.tap()
+        XCTAssertTrue(app.otherElements["scoreboard-panel"].waitForExistence(timeout: 3),
+                      "Scoreboard dropdown should open")
+        scoreboardToggle.tap()
+
+        let deadline = Date().addingTimeInterval(180)
+        while !victoryTitle.exists, Date() < deadline {
+            let answer = app.buttons["answer-0"]
+            if answer.exists, answer.isEnabled, answer.isHittable {
+                answer.tap()
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
         }
+
+        XCTAssertTrue(victoryTitle.exists, "Round should end on the victory screen")
+
+        // Back to Our Ride for another round
+        app.buttons["back-to-ride"].tap()
+        XCTAssertTrue(app.buttons["start-trip"].waitForExistence(timeout: 5),
+                      "Back to the Ride should return to the seat picker")
     }
 }
