@@ -10,23 +10,23 @@ import SwiftData
 
 @main
 struct Travel_TriviaApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    private let container: ModelContainer
+    @State private var engine: GameEngine
 
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
+    init() {
+        // Party/session state models a live in-car party — deliberately
+        // in-memory only; nothing here should outlive the app session yet.
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try! ModelContainer(for: Player.self, configurations: configuration)
+        self.container = container
+        _engine = State(initialValue: GameEngine(context: container.mainContext))
+    }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
+                .environment(engine)
         }
-        .modelContainer(sharedModelContainer)
+        .modelContainer(container)
     }
 }
