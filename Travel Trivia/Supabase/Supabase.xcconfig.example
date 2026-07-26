@@ -1,0 +1,6 @@
+// Copy this file to `Supabase.xcconfig.local` in this same folder and fill
+// in the real values from the Supabase project dashboard (Settings → API).
+// The .local file is gitignored and gets bundled automatically.
+
+SUPABASE_URL = https://YOUR-PROJECT-REF.supabase.co
+SUPABASE_ANON_KEY = YOUR-ANON-KEY
