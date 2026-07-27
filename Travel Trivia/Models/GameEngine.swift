@@ -458,14 +458,24 @@ final class GameEngine {
 
     #if DEBUG
     /// Screenshot/dev shortcuts driven by launch arguments (see RootView).
+    /// -TTGenre <slug> swaps the practice pack away from the Riddle Realm
+    /// default — used to spot-check bundled content packs one genre at a
+    /// time without spinning up a real party.
     func debugApplyLaunchArguments(_ arguments: [String]) {
+        let pack: [TriviaQuestion] = {
+            if let i = arguments.firstIndex(of: "-TTGenre"), arguments.count > i + 1,
+               let genrePack = SeedQuestions.packs[arguments[i + 1]] {
+                return genrePack
+            }
+            return SeedQuestions.riddleRealm
+        }()
         if arguments.contains("-TTAutoStart") {
             joinOpenSeat()
-            startGame(seed: 42)
+            startGame(seed: 42, pack: pack)
         }
         if arguments.contains("-TTVictory") {
             joinOpenSeat()
-            startGame(seed: 42)
+            startGame(seed: 42, pack: pack)
             userPlayer?.score = 11
             finishRound()
         }

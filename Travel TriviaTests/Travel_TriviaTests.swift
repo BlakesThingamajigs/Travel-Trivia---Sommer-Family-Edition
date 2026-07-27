@@ -209,9 +209,105 @@ struct SeedContentTests {
         #expect(grownUp.count == 25)
         #expect(grownUp.allSatisfy { $0.difficulty != .easy && $0.id.hasPrefix("mqm-") })
 
-        // Unknown genres still deal a playable riddle deck.
-        let fallback = QuestionDeck.deal(genreSlug: "superlative-showdown", tier: .familyMix, seed: 3)
+        // Genres with no bundled pack still deal a playable riddle deck.
+        // (superlative-showdown used to be this example, but genre-batch-2
+        // gave it real content — sound-fx-guess still has none.)
+        let fallback = QuestionDeck.deal(genreSlug: "sound-fx-guess", tier: .familyMix, seed: 3)
         #expect(fallback.count == 16)
+    }
+
+    /// Genre Batch 2: six new fixed-answer packs (see SeedQuestions.swift).
+    /// Shape-checks every pack the same way the earlier seeded genres are
+    /// checked, plus a Globe-Trotter-Clues-specific check that its 3
+    /// escalating clues are joined into one multi-line prompt.
+    @Test func genreBatch2PacksAreWellFormed() {
+        let packs: [(String, String, [TriviaQuestion])] = [
+            ("gtc", "globe-trotter-clues", SeedQuestions.globeTrotterClues),
+            ("myth", "mythical-creatures-legends", SeedQuestions.mythicalCreaturesLegends),
+            ("weird", "random-acts-of-weird-facts", SeedQuestions.randomActsOfWeirdFacts),
+            ("super", "superlative-showdown", SeedQuestions.superlativeShowdown),
+            ("time", "time-machine", SeedQuestions.timeMachine),
+            ("pop", "pop-culture-time-capsule", SeedQuestions.popCultureTimeCapsule),
+        ]
+        for (prefix, slug, questions) in packs {
+            #expect(questions.count == 30, "\(slug) should have 30 questions")
+            for question in questions {
+                #expect(question.options.count == 6)
+                #expect(question.options.contains { $0.id == question.correctOptionID })
+                #expect(Set(question.options.map(\.id)).count == 6)
+                #expect(!question.prompt.isEmpty)
+                #expect(question.id.hasPrefix("\(prefix)-"))
+            }
+            #expect(Set(questions.map(\.id)).count == 30)
+            #expect(SeedQuestions.packs[slug]?.count == 30)
+        }
+    }
+
+    @Test func globeTrotterCluesPromptsJoinThreeClues() {
+        let questions = SeedQuestions.globeTrotterClues
+        for question in questions {
+            // 3 escalating clues joined with "\n" -> exactly 2 newlines.
+            #expect(question.prompt.filter { $0 == "\n" }.count == 2)
+        }
+    }
+}
+
+/// Genre Batch 2: plays one question of each new fixed-answer genre through
+/// the practice engine, confirming the deck loads (content displays) and a
+/// correct answer scores a point (content scores) — the same pattern the
+/// engine tests above use for the earlier seeded genres.
+@MainActor
+struct GenreBatch2EngineTests {
+    private func playsAndScores(pack: [TriviaQuestion]) async throws {
+        let harness = try EngineHarness()
+        let engine = harness.engine
+        engine.botRoll = { 0.99 }
+        engine.startGame(seed: 7, pack: pack)
+        #expect(engine.questions.count == 30)
+        let question = try #require(engine.currentQuestion)
+        engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
+        #expect(engine.userPlayer?.score == 1)
+        #expect(engine.turnState == .revealing)
+    }
+
+    @Test func globeTrotterCluesRoundScoresCorrectly() async throws {
+        try await playsAndScores(pack: SeedQuestions.globeTrotterClues)
+    }
+
+    @Test func mythicalCreaturesLegendsRoundScoresCorrectly() async throws {
+        try await playsAndScores(pack: SeedQuestions.mythicalCreaturesLegends)
+    }
+
+    @Test func randomActsOfWeirdFactsRoundScoresCorrectly() async throws {
+        try await playsAndScores(pack: SeedQuestions.randomActsOfWeirdFacts)
+    }
+
+    @Test func superlativeShowdownRoundScoresCorrectly() async throws {
+        try await playsAndScores(pack: SeedQuestions.superlativeShowdown)
+    }
+
+    @Test func timeMachineRoundScoresCorrectly() async throws {
+        try await playsAndScores(pack: SeedQuestions.timeMachine)
+    }
+
+    @Test func popCultureTimeCapsuleRoundScoresCorrectly() async throws {
+        try await playsAndScores(pack: SeedQuestions.popCultureTimeCapsule)
+    }
+
+    /// A wrong answer should strike instead of score — confirms the whole
+    /// resolve path (not just the always-correct case) works for the new
+    /// content.
+    @Test func globeTrotterCluesWrongAnswerStrikes() async throws {
+        let harness = try EngineHarness()
+        let engine = harness.engine
+        engine.botRoll = { 0.99 }
+        engine.startGame(seed: 7, pack: SeedQuestions.globeTrotterClues)
+        let question = try #require(engine.currentQuestion)
+        let wrong = try #require(question.options.first { $0.id != question.correctOptionID })
+        engine.submitUserAnswer(optionID: wrong.id)
+        #expect(engine.userPlayer?.score == 0)
+        #expect(engine.userPlayer?.strikes == 1)
+        #expect(engine.revealedCorrectOptionID == question.correctOptionID)
     }
 }
 

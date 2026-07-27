@@ -78,7 +78,10 @@ final class Travel_TriviaUITests: XCTestCase {
 
         let riddleRealm = app.buttons["genre-riddle-realm"]
         XCTAssertTrue(riddleRealm.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["genre-time-machine"].isEnabled, "Empty genres should be disabled")
+        // Time Machine now ships bundled content (genre-batch-2); Animal
+        // Sounds Safari still needs media assets, so it stays the reliably
+        // empty/disabled genre for this check.
+        XCTAssertFalse(app.buttons["genre-animal-sounds-safari"].isEnabled, "Empty genres should be disabled")
         riddleRealm.tap()
 
         app.buttons["difficulty-family-mix"].tap()
@@ -101,6 +104,67 @@ final class Travel_TriviaUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["menu-create"].waitForExistence(timeout: 5),
                       "Ending the party should land back on the main menu")
+    }
+
+    /// Genre-batch-2 spot check: drives one practice round per new bundled
+    /// genre pack (-TTGenre <slug>) and confirms the question card and
+    /// full 2×3 answer grid render and are tappable. Globe-Trotter Clues
+    /// gets an extra frame-overlap check since its 3-clue prompt is by far
+    /// the longest text this engine renders.
+    @MainActor
+    func testGenreBatch2PacksPlayAndRender() throws {
+        let genreSlugs = [
+            "globe-trotter-clues",
+            "mythical-creatures-legends",
+            "random-acts-of-weird-facts",
+            "superlative-showdown",
+            "time-machine",
+            "pop-culture-time-capsule",
+        ]
+
+        for slug in genreSlugs {
+            let app = XCUIApplication()
+            app.launchArguments = ["-TTPractice", "-TTAutoStart", "-TTGenre", slug]
+            app.launch()
+
+            let prompt = app.staticTexts["riddle-prompt"]
+            XCTAssertTrue(prompt.waitForExistence(timeout: 5), "\(slug): question card should render")
+
+            // All 6 answer buttons should exist and be hittable on-screen —
+            // if a long prompt pushed the grid off-screen, isHittable fails.
+            for i in 0..<6 {
+                let answer = app.buttons["answer-\(i)"]
+                XCTAssertTrue(answer.waitForExistence(timeout: 3), "\(slug): answer-\(i) should exist")
+                XCTAssertTrue(answer.isHittable, "\(slug): answer-\(i) should be on-screen and tappable")
+            }
+
+            if slug == "globe-trotter-clues" {
+                // Let the card's entrance transition/animation settle before
+                // measuring or screenshotting — otherwise the frame check
+                // and screenshot can catch a mid-slide-in animation frame
+                // and misread it as clipped content.
+                RunLoop.current.run(until: Date().addingTimeInterval(1.0))
+
+                // The prompt's frame must stay within the window bounds —
+                // catches vertical overflow the 3-clue text could cause.
+                let windowFrame = app.windows.firstMatch.frame
+                let promptFrame = prompt.frame
+                XCTAssertTrue(windowFrame.contains(promptFrame) || windowFrame.intersects(promptFrame),
+                              "Globe-Trotter Clues prompt frame \(promptFrame) should stay within window \(windowFrame)")
+                XCTAssertLessThanOrEqual(promptFrame.maxY, windowFrame.maxY,
+                                          "Globe-Trotter Clues prompt should not overflow past the bottom of the screen")
+                let screenshot = app.screenshot()
+                let attachment = XCTAttachment(screenshot: screenshot)
+                attachment.name = "globe-trotter-clues-question"
+                attachment.lifetime = .keepAlways
+                add(attachment)
+            }
+
+            // Answer once so the round can resolve cleanly before the next
+            // genre's app instance launches.
+            app.buttons["answer-0"].tap()
+            app.terminate()
+        }
     }
 
     /// Settings persists the display name and toggles.
