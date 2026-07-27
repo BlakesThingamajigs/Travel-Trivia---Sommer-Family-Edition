@@ -25,12 +25,30 @@ struct QuestionView: View {
             && engine.userPickedOptionID != nil
     }
 
+    /// Curveball preview: the copilot gets the early peek; everyone else
+    /// sees a cover card until the window ends.
+    private var questionHiddenByCurveball: Bool {
+        engine.curveballPreviewActive && !engine.localPlayerIsCopilot
+    }
+
     var body: some View {
         VStack(spacing: 10) {
             header
 
-            if let question = engine.currentQuestion {
+            if questionHiddenByCurveball {
+                CurveballCover()
+                Spacer(minLength: 8)
+                AvatarStrip()
+                Spacer(minLength: 8)
+            } else if let question = engine.currentQuestion {
                 RiddleCard(question: question)
+
+                if engine.curveballPreviewActive {
+                    StickerChip(text: "CURVEBALL — ONLY YOU CAN SEE THIS!",
+                                fill: TT.tangerine, textColor: .white, textSize: 12)
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityIdentifier("curveball-peek")
+                }
 
                 Spacer(minLength: 8)
                     .frame(maxHeight: 34)
@@ -118,6 +136,14 @@ private struct RiddleCard: View {
                             fill: TT.grape, textColor: .white, textSize: 11)
                 StickerChip(text: question.difficulty.displayName,
                             fill: difficultyColor, textColor: .white, textSize: 11)
+                if engine.currentQuestionIsCurveball {
+                    StickerChip(text: "CURVEBALL!", fill: TT.tangerine,
+                                textColor: .white, textSize: 11)
+                        .rotationEffect(.degrees(-4))
+                } else if question.isMajorityScored {
+                    StickerChip(text: "CAR VOTES", fill: TT.sky,
+                                textColor: .white, textSize: 11)
+                }
                 Spacer()
             }
             Text(question.prompt)
@@ -141,6 +167,34 @@ private struct RiddleCard: View {
             insertion: .move(edge: .trailing).combined(with: .opacity),
             removal: .move(edge: .leading).combined(with: .opacity)))
         .animation(.spring(response: 0.45, dampingFraction: 0.7), value: question.id)
+    }
+}
+
+/// What everyone but the copilot sees during a curveball preview: the
+/// question is hidden while the copilot gets their real-world head start.
+private struct CurveballCover: View {
+    @State private var wobble = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "eye.fill")
+                .font(.system(size: 34, weight: .black))
+                .foregroundStyle(.white)
+                .rotationEffect(.degrees(wobble ? 6 : -6))
+                .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true),
+                           value: wobble)
+            StickerText(text: "CURVEBALL!", size: 34)
+            Text("The copilot sees this one first.\nListen carefully… or don't.")
+                .font(TT.font(15, .bold))
+                .foregroundStyle(TT.ink)
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, minHeight: 180)
+        .sticker(RoundedRectangle(cornerRadius: 20), fill: TT.tangerine)
+        .accessibilityIdentifier("curveball-cover")
+        .onAppear { wobble = true }
+        .transition(.scale.combined(with: .opacity))
     }
 }
 
@@ -267,13 +321,18 @@ private struct AnswerButton: View {
     var question: TriviaQuestion
 
     private var isRevealing: Bool { engine.turnState == .revealing }
-    private var isCorrectOption: Bool { option.id == question.correctOptionID }
+    /// Authored answer, or the majority pick once a prediction question
+    /// resolves — the engine owns which one applies.
+    private var isCorrectOption: Bool {
+        engine.revealedCorrectOptionID == option.id
+    }
     private var isUsersWrongPick: Bool {
         isRevealing && engine.userPickedOptionID == option.id && !isCorrectOption
     }
     private var buttonColor: Color { TT.answerColors[index % TT.answerColors.count] }
     private var userCanAnswer: Bool {
         engine.turnState == .awaitingAnswer
+            && !engine.curveballPreviewActive
             && engine.userPickedOptionID == nil
             && !(engine.userPlayer?.isOut ?? true)
     }
