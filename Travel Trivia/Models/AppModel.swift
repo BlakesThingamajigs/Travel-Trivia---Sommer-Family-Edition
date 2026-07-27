@@ -100,13 +100,26 @@ final class AppModel {
         // Stays on the join screen until the first synced state flips us over.
     }
 
-    /// Local player backs out (host: ends the party for everyone).
+    /// Local player backs out (host: ends the party for everyone). Used
+    /// from the Lobby, before anyone's invested in a round.
     func leaveParty() {
         if party.isHost {
             party.endParty()
         } else {
             party.leaveParty()
         }
+        engine.detachParty()
+        route = .menu
+    }
+
+    /// Any player leaves a game already in progress (the mid-game
+    /// scoreboard's Leave Game button) — unlike `leaveParty()`, the rest of
+    /// the car keeps playing: a departing host hands off to the backup
+    /// instead of ending the party, and a departing non-host is marked
+    /// gone immediately rather than going through the accidental-dropout
+    /// grace window.
+    func leaveGameInProgress() {
+        party.leaveGameInProgress()
         engine.detachParty()
         route = .menu
     }

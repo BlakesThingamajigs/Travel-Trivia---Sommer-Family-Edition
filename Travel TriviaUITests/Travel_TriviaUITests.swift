@@ -214,6 +214,51 @@ final class Travel_TriviaUITests: XCTestCase {
                        "Equipped cosmetic should still be equipped after relaunch")
     }
 
+    /// Leave Game: reachable from the mid-game scoreboard dropdown (not
+    /// just the Lobby's back-out), and confirms tapping through it lands
+    /// back on the Main Menu. The real party-continues-without-the-leaver
+    /// and host-hands-off-to-backup behavior is covered by
+    /// LeaveGameTests/PartySessionHostTests at the unit level (this needs
+    /// a second connected device to observe from the outside) and by the
+    /// multi-simulator connectivity pass.
+    @MainActor
+    func testLeaveGameButtonReachableMidGameAndReturnsToMenu() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.buttons["menu-create"].tap()
+        app.buttons["mode-three-strikes"].tap()
+        app.buttons["genre-riddle-realm"].tap()
+        app.buttons["difficulty-family-mix"].tap()
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText("Leave Test Party")
+        app.buttons["create-party"].tap()
+
+        XCTAssertTrue(app.buttons["lobby-start"].waitForExistence(timeout: 8))
+        app.buttons["lobby-start"].tap()
+        // Solo host is short of the mode's player minimum.
+        let startAnyway = app.alerts.buttons["Start Anyway"]
+        if startAnyway.waitForExistence(timeout: 3) { startAnyway.tap() }
+
+        XCTAssertTrue(app.buttons["start-trip"].waitForExistence(timeout: 5))
+        app.buttons["start-trip"].tap()
+
+        XCTAssertTrue(app.buttons["scoreboard-toggle"].waitForExistence(timeout: 5))
+        app.buttons["scoreboard-toggle"].tap()
+        let leaveButton = app.buttons["leave-game"]
+        XCTAssertTrue(leaveButton.waitForExistence(timeout: 3), "Leave Game should be reachable from the scoreboard dropdown")
+        leaveButton.tap()
+
+        let confirm = app.alerts.buttons["Leave"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
+        confirm.tap()
+
+        XCTAssertTrue(app.buttons["menu-create"].waitForExistence(timeout: 5),
+                      "Leaving mid-game should land back on the Main Menu")
+    }
+
     /// Button-label truncation fix (RoadSignLabel + StickerChip): screenshots
     /// the difficulty picker (all 3 tiers, including the longest label,
     /// "Grown-Up Challenge") and the Create Game summary chips that echo the

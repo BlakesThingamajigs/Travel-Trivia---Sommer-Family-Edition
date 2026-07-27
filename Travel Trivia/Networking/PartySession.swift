@@ -194,6 +194,22 @@ final class PartySession: NSObject {
         teardown(keepingState: false)
     }
 
+    /// Host leaves a game already in progress on purpose — unlike
+    /// `endParty()` (the Lobby's "back out" flow, before anyone's invested
+    /// in a round), the rest of the car keeps playing: tells the backup to
+    /// promote itself immediately instead of waiting to notice the host
+    /// went quiet.
+    func leaveGameInProgress() {
+        guard isHost else {
+            leaveParty()
+            return
+        }
+        if let mcSession, !mcSession.connectedPeers.isEmpty {
+            send(.hostLeaving, to: mcSession.connectedPeers)
+        }
+        teardown(keepingState: false)
+    }
+
     /// Manual retry from the join screen after a failure.
     func retryJoin() {
         guard let joinTarget, let localPlayerID else { return }
@@ -953,6 +969,18 @@ final class PartySession: NSObject {
             teardown(keepingState: false)
             onPartyClosed?("The pilot ended the party")
 
+        case .hostLeaving:
+            guard !isHost else { return }
+            // Same reaction as noticing the host vanish (handleLostPeerAsClient),
+            // just triggered immediately instead of waiting on MCSession's
+            // slow disconnect notice or a heartbeat timeout.
+            if state?.backupHostID == localPlayerID {
+                promoteToHost()
+            } else {
+                hostPeer = nil
+                beginReconnect()
+            }
+
         case .ping:
             guard !isHost else { return }
             lastHostContact = Date()
@@ -1162,6 +1190,29 @@ final class PartySession: NSObject {
                     "code": code ?? state.code,
                     "epoch": String(epoch)]
         handleFoundPeerAsHost(info: info)
+    }
+
+    /// Headless test seam: feed a client session an authoritative snapshot
+    /// the way it would arrive over the wire, without opening real
+    /// Multipeer sockets — lets a second, client-side `PartySession` in the
+    /// same test be brought to a known state so its own reactions (host
+    /// migration included) can be tested directly.
+    func debugReceiveState(_ incoming: PartyState) {
+        guard !isHost else { return }
+        handleIncoming(.state(incoming), from: MCPeerID(displayName: "test-host-\(UUID())"))
+    }
+
+    /// Headless test seam for a client receiving `.hostLeaving`: same
+    /// reaction `handleIncoming` gives it, without needing a real MCPeerID
+    /// to attribute the (unused) message source to.
+    func debugSimulateHostLeaving() {
+        guard !isHost else { return }
+        if state?.backupHostID == localPlayerID {
+            promoteToHost()
+        } else {
+            hostPeer = nil
+            beginReconnect()
+        }
     }
     #endif
 }

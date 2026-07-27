@@ -923,6 +923,85 @@ struct HostPartitionTests {
     }
 }
 
+/// Leave Game: a deliberate mid-game exit, distinct from the accidental-
+/// dropout grace-period/reconnection system — the leaver is marked gone
+/// immediately, and the rest of the party keeps playing.
+@MainActor
+struct LeaveGameTests {
+    let hostID = UUID()
+    let riderID = UUID()   // first joiner: becomes the backup host
+    let backseatID = UUID()
+
+    private func startParty(_ session: PartySession, deck: [TriviaQuestion]) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.dealDeck = { _ in (deck, "would-you-rather", "would-you-rather") }
+        let config = PartyConfig(modeSlug: "three-strikes", modeName: "Three Strikes",
+                                 genreSlug: "would-you-rather", genreName: "would-you-rather",
+                                 difficulty: .familyMix, minPlayers: 2)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.startRide()
+        session.startTrip()
+    }
+
+    /// A non-host's deliberate leave (`.goodbye`) skips the accidental-
+    /// dropout grace window entirely — marked `.left` in one step, not
+    /// `.dropped` waiting on a timer — and the round keeps moving without
+    /// them.
+    @Test func nonHostLeavingMidGameIsMarkedGoneImmediatelyAndRoundContinues() async throws {
+        let session = PartySession()
+        startParty(session, deck: SeedQuestions.wouldYouRather)
+        #expect(session.state?.backupHostID == riderID, "first joiner should be the designated backup")
+
+        session.debugApplyIntent(.goodbye(playerID: backseatID))
+
+        let leftPlayer = try #require(session.state?.player(backseatID))
+        #expect(leftPlayer.presence == .left, "goodbye should mark the player gone immediately, not .dropped")
+        #expect(leftPlayer.seatIndex == nil)
+
+        // The round continues: host and rider can still answer without
+        // waiting on the departed player. Would You Rather is majority-
+        // scored (no authored correct answer), so both just pick the same
+        // option to resolve the question.
+        let question = try #require(session.state?.round?.questions.first)
+        let pick = try #require(question.options.first).id
+        session.submitLocalAnswer(optionID: pick)
+        session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: pick))
+        await session.debugWaitForAdvance()
+        #expect(session.state?.round?.questionIndex == 1, "round should have advanced without the departed player blocking it")
+    }
+
+    /// A host's deliberate leave mid-game hands off to the backup right
+    /// away — the backup doesn't have to wait to notice the host went
+    /// quiet, unlike a real accidental drop.
+    @Test func hostLeavingMidGamePromotesBackupImmediately() throws {
+        let hostSession = PartySession()
+        startParty(hostSession, deck: SeedQuestions.wouldYouRather)
+        let snapshot = try #require(hostSession.state)
+        #expect(snapshot.backupHostID == riderID)
+
+        // The backup's own session, brought to the same known state the
+        // real sync would have given it.
+        let riderSession = PartySession()
+        riderSession.suppressesNetworking = true
+        riderSession.localPlayerID = riderID
+        riderSession.debugReceiveState(snapshot)
+        #expect(riderSession.isHost == false)
+
+        riderSession.debugSimulateHostLeaving()
+
+        #expect(riderSession.isHost == true, "the backup should promote itself immediately")
+        #expect(riderSession.state?.hostID == riderID)
+        #expect(riderSession.state?.epoch == snapshot.epoch + 1)
+        // The round in flight survives the handoff instead of resetting.
+        #expect(riderSession.state?.round?.questionIndex == snapshot.round?.questionIndex)
+    }
+}
+
 /// Badges & My Garage progression — local-only SwiftData persistence
 /// (ProgressStore) that's meant to survive relaunches on this device.
 @MainActor

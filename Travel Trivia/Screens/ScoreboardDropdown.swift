@@ -11,6 +11,8 @@ import SwiftData
 
 struct ScoreboardDropdown: View {
     @Environment(GameEngine.self) private var engine
+    @Environment(AppModel.self) private var app
+    @State private var confirmLeave = false
 
     private var standings: [Player] {
         engine.players.sorted {
@@ -33,11 +35,30 @@ struct ScoreboardDropdown: View {
             ForEach(standings, id: \.persistentModelID) { player in
                 ScoreboardRow(player: player)
             }
+            // Real party games only — practice has no roster to leave and
+            // no networking to hand off.
+            if engine.playContext != .practice {
+                Button {
+                    confirmLeave = true
+                } label: {
+                    StickerChip(text: "LEAVE GAME", fill: TT.cherry, textColor: .white, textSize: 11)
+                }
+                .buttonStyle(.bubble)
+                .accessibilityIdentifier("leave-game")
+            }
         }
         .padding(14)
         .sticker(RoundedRectangle(cornerRadius: 22), fill: TT.paper, drop: CGSize(width: 0, height: 6))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("scoreboard-panel")
+        .alert("Leave this game?", isPresented: $confirmLeave) {
+            Button("Leave", role: .destructive) { app.leaveGameInProgress() }
+            Button("Keep Playing", role: .cancel) {}
+        } message: {
+            Text(engine.playContext == .partyHost
+                 ? "The rest of the car keeps playing — another rider takes over as host."
+                 : "The rest of the car keeps playing without you.")
+        }
     }
 }
 

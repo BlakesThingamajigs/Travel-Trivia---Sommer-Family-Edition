@@ -247,6 +247,13 @@ nonisolated enum WireMessage: Codable, Sendable {
     case intent(ClientIntent)
     /// Host → everyone: the host closed the party on purpose (no migration).
     case partyEnded
+    /// Host → everyone: the host is leaving a game already in progress on
+    /// purpose (not ending the party) — the designated backup should
+    /// promote itself right away instead of waiting to notice the host
+    /// went quiet, and everyone else should treat the host as gone
+    /// immediately rather than waiting out MCSession's slow disconnect
+    /// notice.
+    case hostLeaving
     /// Presence heartbeats. MCSession can take 30+ seconds to notice an
     /// abruptly-dead peer (dead battery, tunnel), which would stall the
     /// round waiting on a ghost — these keep dropout detection snappy.
