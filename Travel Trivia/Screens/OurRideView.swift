@@ -179,9 +179,15 @@ private struct CarTopDownView: View {
                 OccupiedSeat(player: player)
                     .transition(.scale(scale: 0.2).combined(with: .opacity))
             } else if engine.playContext == .practice {
-                // Session-1 slice: the open seat joins the 4th mock player.
-                OpenSeat(label: "TAP TO JOIN") {
-                    engine.joinOpenSeat()
+                // Session-1 slice: fixed at 3 mock players + 1 joinable 4th
+                // (Blake, Scout, Turbo, Ziggy) — the 2 extra seats the real
+                // 6-seat car added stay structurally empty here, so only
+                // the one seat `joinOpenSeat()` can actually fill shows a
+                // tappable affordance.
+                if index == engine.openSeatIndex {
+                    OpenSeat(label: "TAP TO JOIN") {
+                        engine.joinOpenSeat()
+                    }
                 }
             } else {
                 // Real party: any free seat is up for grabs for *you*
