@@ -34,15 +34,19 @@ final class AppModel {
     let party: PartySession
     let engine: GameEngine
     let audio: AudioDirector
+    let progress: ProgressStore
 
     init(engine: GameEngine, profile: LocalProfile = LocalProfile(),
-         catalog: ContentCatalog = ContentCatalog(), party: PartySession = PartySession()) {
+         catalog: ContentCatalog = ContentCatalog(), party: PartySession = PartySession(),
+         progress: ProgressStore) {
         self.engine = engine
         self.profile = profile
         self.catalog = catalog
         self.party = party
+        self.progress = progress
         self.audio = AudioDirector(profile: profile)
         audio.configureSession()
+        engine.progress = progress
         wireParty()
     }
 
@@ -114,6 +118,9 @@ final class AppModel {
     /// everyone claims seats and answers); -TTShortGrace shrinks the
     /// disconnect grace window to 10 s so dropout tests don't wait 45.
     func debugApplyLaunchArguments(_ arguments: [String]) {
+        if arguments.contains("-TTResetProgress") {
+            progress.debugResetAll()
+        }
         if arguments.contains("-TTPractice") || arguments.contains("-TTAutoStart")
             || arguments.contains("-TTVictory") {
             route = .practice

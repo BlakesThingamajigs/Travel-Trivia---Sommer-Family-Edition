@@ -896,3 +896,60 @@ struct HostPartitionTests {
         #expect(session.isHost == true)
     }
 }
+
+/// Badges & My Garage progression — local-only SwiftData persistence
+/// (ProgressStore) that's meant to survive relaunches on this device.
+@MainActor
+struct ProgressStoreTests {
+
+    /// The core "relaunch and check it's still there" guarantee, done at
+    /// the SwiftData layer: a badge earned through one ModelContainer must
+    /// still be there when a brand-new container/context opens the same
+    /// on-disk store — exactly what happens across a real app relaunch.
+    @Test func awardedBadgePersistsAcrossANewContainer() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appending(path: "progress-test-\(UUID().uuidString).store")
+        let configuration = ModelConfiguration(url: storeURL)
+        let playerID = UUID()
+
+        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self,
+                                            configurations: configuration)
+        let progress1 = ProgressStore(context: container1.mainContext, playerID: playerID)
+        #expect(progress1.earnedBadgeIDs.isEmpty)
+        #expect(progress1.award(BadgeCatalog.perfectRoundID) == true)
+        // Idempotent: earning the same badge again shouldn't re-fire or duplicate.
+        #expect(progress1.award(BadgeCatalog.perfectRoundID) == false)
+
+        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self,
+                                            configurations: configuration)
+        let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
+        #expect(progress2.earnedBadgeIDs.contains(BadgeCatalog.perfectRoundID))
+    }
+
+    @Test func finishingARoundAwardsGenreCompletionAndPerfectRound() async throws {
+        let engineHarness = try EngineHarness()
+        let engine = engineHarness.engine
+        let progressConfig = ModelConfiguration(isStoredInMemoryOnly: true)
+        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self,
+                                                   configurations: progressConfig)
+        let progress = ProgressStore(context: progressContainer.mainContext, playerID: UUID())
+        engine.progress = progress
+
+        // Every bot answers correctly too, so nobody (including the user)
+        // takes a strike for the whole round — the Perfect Round precondition.
+        engine.botRoll = { 0 }
+        engine.startGame(seed: 7)
+
+        var answered = 0
+        while engine.phase == .playing, answered < 20 {
+            let question = try #require(engine.currentQuestion)
+            engine.submitUserAnswer(optionID: question.correctOptionID ?? question.options[0].id)
+            await engine.waitForPendingAdvance()
+            answered += 1
+        }
+
+        #expect(engine.phase == .victory)
+        #expect(progress.earnedBadgeIDs.contains(BadgeCatalog.genreCompletionID("riddle-realm")))
+        #expect(progress.earnedBadgeIDs.contains(BadgeCatalog.perfectRoundID))
+    }
+}

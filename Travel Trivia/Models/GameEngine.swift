@@ -85,6 +85,12 @@ final class GameEngine {
     /// Wired by the app when a real party forms.
     @ObservationIgnored weak var party: PartySession?
     @ObservationIgnored private var localPlayerID: UUID?
+    /// Wired by AppModel at launch — badges get evaluated here as rounds
+    /// play out. Weak since ProgressStore's lifetime belongs to AppModel.
+    @ObservationIgnored weak var progress: ProgressStore?
+    /// Comeback tracking: true once the local player has been alone in
+    /// last place at some point during the round currently in progress.
+    @ObservationIgnored private var localWasAloneInLast = false
 
     // Diffing anchors for firing one-shot animations off synced snapshots.
     @ObservationIgnored private var lastSyncedRevealing = false
@@ -209,6 +215,7 @@ final class GameEngine {
         userPickedOptionID = nil
         revealedCorrectOptionID = nil
         turnState = .awaitingAnswer
+        localWasAloneInLast = false
         phase = .playing
         beginQuestionIfSpectating()
     }
@@ -303,6 +310,8 @@ final class GameEngine {
         case false?: shakeTrigger += 1
         case nil: break
         }
+        updateComebackTracking()
+        evaluateCurveballCatch()
 
         let delay = revealDuration
         advanceTask = Task { [weak self] in
@@ -341,11 +350,54 @@ final class GameEngine {
         }
         confettiTrigger += 1
         phase = .victory
+        evaluateBadges()
     }
 
     /// Exposed so tests can await the scheduled reveal/advance step.
     func waitForPendingAdvance() async {
         await advanceTask?.value
+    }
+
+    // MARK: - Badges
+
+    /// True once the local player is (uniquely) in last place among the
+    /// still-alive players — the "Comeback Kid" precondition. Called after
+    /// every score update, practice or party.
+    private func updateComebackTracking() {
+        guard let user = userPlayer, !user.isOut else { return }
+        let alive = alivePlayers
+        guard alive.count > 1 else { return }
+        let others = alive.filter { $0 !== user }
+        if others.allSatisfy({ $0.score > user.score }) {
+            localWasAloneInLast = true
+        }
+    }
+
+    /// Copilot's Curveball: award the moment the local player's answer to a
+    /// curveball question is revealed correct.
+    private func evaluateCurveballCatch() {
+        guard let progress, isCurveballMode, currentQuestionIsCurveball,
+              let user = userPlayer, user.lastAnswerCorrect == true
+        else { return }
+        progress.award(BadgeCatalog.curveballCaughtID)
+    }
+
+    /// Evaluated once a round reaches its victory screen — genre
+    /// completion (finishing the round at all), mode mastery and comeback
+    /// (winning), and perfect round (zero strikes for the local player).
+    private func evaluateBadges() {
+        guard let progress, let user = userPlayer else { return }
+        progress.award(BadgeCatalog.genreCompletionID(activeGenreSlug))
+        if winner?.isUser == true {
+            let modeSlug = activeModeSlug ?? "three-strikes"
+            progress.award(BadgeCatalog.modeMasteryID(modeSlug))
+            if localWasAloneInLast {
+                progress.award(BadgeCatalog.comebackID)
+            }
+        }
+        if !questions.isEmpty, user.strikes == 0 {
+            progress.award(BadgeCatalog.perfectRoundID)
+        }
     }
 
     // MARK: - Party mirroring
@@ -383,6 +435,7 @@ final class GameEngine {
         wagerWindowActive = false
         userSubmittedWager = nil
         teamTurnPlayerIDs = [nil, nil]
+        localWasAloneInLast = false
         phase = .ride
     }
 
@@ -429,6 +482,8 @@ final class GameEngine {
             case false?: shakeTrigger += 1
             case nil: break
             }
+            updateComebackTracking()
+            evaluateCurveballCatch()
         }
         if let round, round.questionIndex != lastSyncedQuestionIndex {
             userPickedOptionID = nil
@@ -440,8 +495,13 @@ final class GameEngine {
             userPickedOptionID = nil
             userSubmittedWager = nil
         }
+        if state.phase == .playing, lastSyncedPhase != .playing {
+            // A fresh round just started.
+            localWasAloneInLast = false
+        }
         if state.phase == .victory, lastSyncedPhase != .victory {
             confettiTrigger += 1
+            evaluateBadges()
         }
         if state.phase == .ride, lastSyncedPhase != .ride {
             userPickedOptionID = nil

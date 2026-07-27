@@ -167,6 +167,26 @@ final class Travel_TriviaUITests: XCTestCase {
         }
     }
 
+    /// Badges: -TTVictory's debug harness plays a full (score-forced) round
+    /// as the user, which should award at least genre completion, mode
+    /// mastery, and perfect round all at once. Confirms the celebration
+    /// moment fires for real. (Persistence-across-relaunch is covered by
+    /// ProgressStoreTests at the unit level, which round-trips a second
+    /// SwiftData container against the same on-disk store — no UI surface
+    /// depends on My Garage existing for that check.)
+    @MainActor
+    func testBadgesEarnedShowCelebration() throws {
+        let app = XCUIApplication()
+        // Wipe this device's progress first so the run is deterministic
+        // regardless of what earlier test runs left behind.
+        app.launchArguments = ["-TTResetProgress", "-TTVictory"]
+        app.launch()
+
+        let celebration = app.descendants(matching: .any)["badge-celebration"].firstMatch
+        XCTAssertTrue(celebration.waitForExistence(timeout: 8),
+                      "Earning a badge should show the celebration overlay")
+    }
+
     /// Settings persists the display name and toggles.
     @MainActor
     func testSettingsEditsPersistLocally() throws {
