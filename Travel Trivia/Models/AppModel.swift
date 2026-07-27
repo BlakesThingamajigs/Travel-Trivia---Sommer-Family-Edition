@@ -37,15 +37,19 @@ final class AppModel {
     let engine: GameEngine
     let audio: AudioDirector
     let progress: ProgressStore
+    /// Host-only authentication (Apple / Google via Supabase Auth). Joining
+    /// players never touch this — see PartySession's join flow.
+    let auth: AuthManager
 
     init(engine: GameEngine, profile: LocalProfile = LocalProfile(),
          catalog: ContentCatalog = ContentCatalog(), party: PartySession = PartySession(),
-         progress: ProgressStore) {
+         progress: ProgressStore, auth: AuthManager = AuthManager()) {
         self.engine = engine
         self.profile = profile
         self.catalog = catalog
         self.party = party
         self.progress = progress
+        self.auth = auth
         self.audio = AudioDirector(profile: profile)
         audio.configureSession()
         engine.progress = progress
@@ -122,6 +126,9 @@ final class AppModel {
     func debugApplyLaunchArguments(_ arguments: [String]) {
         if arguments.contains("-TTResetProgress") {
             progress.debugResetAll()
+        }
+        if arguments.contains("-TTSettings") {
+            route = .settings
         }
         if arguments.contains("-TTPractice") || arguments.contains("-TTAutoStart")
             || arguments.contains("-TTVictory") {

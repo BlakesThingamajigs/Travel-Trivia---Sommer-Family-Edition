@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import Supabase
 
 @main
 struct Travel_TriviaApp: App {
@@ -42,6 +43,12 @@ struct Travel_TriviaApp: App {
                 .environment(app.engine)
                 .task {
                     await app.catalog.refresh()
+                }
+                .onOpenURL { url in
+                    // Google's OAuth flow lands back here via the
+                    // custom redirect scheme registered in Info.plist;
+                    // hand it to Supabase to complete the session exchange.
+                    SupabaseService.client?.auth.handle(url)
                 }
         }
         .modelContainer(container)
