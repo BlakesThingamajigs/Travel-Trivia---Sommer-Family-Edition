@@ -1002,6 +1002,61 @@ struct LeaveGameTests {
     }
 }
 
+/// The car seats 6 now (was 4) — Multipeer already supports more players
+/// than that, so this is really just confirming `PartyWire.maxPlayers`,
+/// seat assignment, and a full round all actually work at the new cap,
+/// not just that the seat art fits 6 boxes on screen.
+@MainActor
+struct SixSeatPartyTests {
+    @Test func sixPlayersJoinSeatAndPlayAFullRoundTogether() async throws {
+        let session = PartySession()
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.dealDeck = { _ in (SeedQuestions.riddleRealm, "riddle-realm", "Riddle Realm") }
+
+        let hostID = UUID()
+        let riderIDs = (0..<5).map { _ in UUID() }
+        let config = PartyConfig(modeSlug: "three-strikes", modeName: "Three Strikes",
+                                 genreSlug: "riddle-realm", genreName: "Riddle Realm",
+                                 difficulty: .familyMix, minPlayers: 2)
+        session.host(partyName: "Full Car", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        for (i, id) in riderIDs.enumerated() {
+            session.debugApplyIntent(.hello(playerID: id, name: "Rider \(i)"))
+        }
+        #expect(session.state?.players.count == 6, "all 6 should be admitted, none turned away at the cap")
+
+        let allIDs = [hostID] + riderIDs
+        for (seat, id) in allIDs.enumerated() {
+            session.debugApplyIntent(.requestSeat(playerID: id, seatIndex: seat))
+        }
+        #expect(Set(session.state?.players.compactMap(\.seatIndex) ?? []) == Set(0..<6),
+                "every player should land in a distinct one of the 6 seats")
+
+        session.startRide()
+        session.startTrip()
+        #expect(session.state?.phase == .playing)
+
+        var answered = 0
+        while session.state?.phase == .playing, answered < 20 {
+            let question = try #require(session.state?.round?.questions[
+                session.state?.round?.questionIndex ?? 0])
+            let correct = try #require(question.correctOptionID)
+            session.submitLocalAnswer(optionID: correct)
+            for id in riderIDs {
+                session.debugApplyIntent(.submitAnswer(playerID: id, optionID: correct))
+            }
+            await session.debugWaitForAdvance()
+            answered += 1
+        }
+
+        #expect(session.state?.phase == .victory, "a full round with all 6 players should reach victory")
+        let players = try #require(session.state?.players)
+        #expect(players.allSatisfy { $0.score == answered })
+    }
+}
+
 /// Badges & My Garage progression — local-only SwiftData persistence
 /// (ProgressStore) that's meant to survive relaunches on this device.
 @MainActor

@@ -15,7 +15,7 @@ import Foundation
 /// Multipeer service type (Bonjour: `_travel-trivia._tcp`). Max 15 chars.
 nonisolated enum PartyWire {
     static let serviceType = "travel-trivia"
-    static let maxPlayers = 4  // one per car seat
+    static let maxPlayers = 6  // one per car seat
     static let disconnectGrace: Duration = .seconds(45)
 }
 

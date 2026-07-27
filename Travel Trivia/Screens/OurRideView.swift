@@ -86,7 +86,8 @@ private struct CarTopDownView: View {
     @Environment(GameEngine.self) private var engine
 
     private let carWidth: CGFloat = 300
-    private let carHeight: CGFloat = 420
+    // Tall enough for 3 rows of 2 (6 seats) — was a 4-seat/2-row car.
+    private let carHeight: CGFloat = 560
 
     var body: some View {
         ZStack {
@@ -110,17 +111,17 @@ private struct CarTopDownView: View {
                 .fill(TT.paper)
                 .stroke(TT.ink, lineWidth: 3.5)
                 .frame(width: carWidth * 0.62, height: 44)
-                .offset(y: -carHeight * 0.38)
+                .offset(y: -carHeight * 0.42)
             // Rear window
             UnevenRoundedRectangle(topLeadingRadius: 10, bottomLeadingRadius: 26,
                                    bottomTrailingRadius: 26, topTrailingRadius: 10)
                 .fill(TT.paper)
                 .stroke(TT.ink, lineWidth: 3.5)
                 .frame(width: carWidth * 0.56, height: 34)
-                .offset(y: carHeight * 0.40)
+                .offset(y: carHeight * 0.44)
             // Headlights
-            headlight.offset(x: -carWidth * 0.30, y: -carHeight * 0.475)
-            headlight.offset(x: carWidth * 0.30, y: -carHeight * 0.475)
+            headlight.offset(x: -carWidth * 0.30, y: -carHeight * 0.48)
+            headlight.offset(x: carWidth * 0.30, y: -carHeight * 0.48)
         }
         .frame(width: carWidth, height: carHeight)
     }
@@ -142,13 +143,14 @@ private struct CarTopDownView: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(TT.ink, lineWidth: 3.5))
                     .frame(width: 26, height: 72)
                     .offset(x: (isLeft ? -1 : 1) * (carWidth / 2 + 8),
-                            y: (isFront ? -1 : 1) * carHeight * 0.27)
+                            y: (isFront ? -1 : 1) * carHeight * 0.3)
             }
         }
     }
 
+    /// 3 rows of 2 — one per car seat, up to `PartyWire.maxPlayers` (6).
     private var seats: some View {
-        VStack(spacing: 34) {
+        VStack(spacing: 20) {
             HStack(spacing: 44) {
                 seatView(index: 0)
                 seatView(index: 1)
@@ -156,6 +158,10 @@ private struct CarTopDownView: View {
             HStack(spacing: 44) {
                 seatView(index: 2)
                 seatView(index: 3)
+            }
+            HStack(spacing: 44) {
+                seatView(index: 4)
+                seatView(index: 5)
             }
         }
         .offset(y: 6)

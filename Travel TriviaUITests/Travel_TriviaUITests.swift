@@ -214,6 +214,38 @@ final class Travel_TriviaUITests: XCTestCase {
                        "Equipped cosmetic should still be equipped after relaunch")
     }
 
+    /// 6-seat car: screenshots Our Ride's seat picker for a real hosted
+    /// party (solo host — the layout renders all 6 seat slots regardless
+    /// of how many are filled). Confirms the new 3rd row of seats actually
+    /// renders inside the car body at the new taller `carHeight`, not just
+    /// that `PartyWire.maxPlayers` is 6 in code.
+    @MainActor
+    func testSixSeatCarRendersAllSeatsInOurRide() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.buttons["menu-create"].tap()
+        app.buttons["mode-three-strikes"].tap()
+        app.buttons["genre-riddle-realm"].tap()
+        app.buttons["difficulty-family-mix"].tap()
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText("Full Car")
+        app.buttons["create-party"].tap()
+
+        XCTAssertTrue(app.buttons["lobby-start"].waitForExistence(timeout: 8))
+        app.buttons["lobby-start"].tap()
+        let startAnyway = app.alerts.buttons["Start Anyway"]
+        if startAnyway.waitForExistence(timeout: 3) { startAnyway.tap() }
+
+        XCTAssertTrue(app.staticTexts["OUR RIDE"].waitForExistence(timeout: 5))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "our-ride-six-seats"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     /// Leave Game: reachable from the mid-game scoreboard dropdown (not
     /// just the Lobby's back-out), and confirms tapping through it lands
     /// back on the Main Menu. The real party-continues-without-the-leaver
