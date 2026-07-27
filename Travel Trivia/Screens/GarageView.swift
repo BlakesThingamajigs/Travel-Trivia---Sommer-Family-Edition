@@ -75,13 +75,22 @@ struct GarageView: View {
             AvatarFullBody(color: TT.avatarColors[0], expression: .happy, height: 150,
                            hatID: app.progress.avatarLoadout.hatID,
                            accessoryID: app.progress.avatarLoadout.accessoryID,
-                           stickerID: app.progress.avatarLoadout.stickerID)
+                           stickerID: app.progress.avatarLoadout.stickerID,
+                           hairID: app.progress.avatarLoadout.hairID,
+                           faceMarkID: app.progress.avatarLoadout.faceMarkID,
+                           headShapeID: app.progress.avatarLoadout.headShapeID)
                 .accessibilityIdentifier("garage-avatar-preview")
 
+            cosmeticRow(title: "SHAPE", items: CosmeticCatalog.headShapes,
+                        equipped: app.progress.avatarLoadout.headShapeID) { app.progress.equipHeadShape($0) }
+            cosmeticRow(title: "HAIR", items: CosmeticCatalog.hairstyles,
+                        equipped: app.progress.avatarLoadout.hairID) { app.progress.equipHair($0) }
             cosmeticRow(title: "HAT", items: CosmeticCatalog.hats,
                         equipped: app.progress.avatarLoadout.hatID) { app.progress.equipHat($0) }
             cosmeticRow(title: "ACCESSORY", items: CosmeticCatalog.accessories,
                         equipped: app.progress.avatarLoadout.accessoryID) { app.progress.equipAccessory($0) }
+            cosmeticRow(title: "FACE", items: CosmeticCatalog.faceMarks,
+                        equipped: app.progress.avatarLoadout.faceMarkID) { app.progress.equipFaceMark($0) }
             cosmeticRow(title: "CHEEK STICKER", items: CosmeticCatalog.stickers,
                         equipped: app.progress.avatarLoadout.stickerID) { app.progress.equipSticker($0) }
         }
@@ -141,17 +150,47 @@ struct GarageView: View {
 
     // MARK: - Shared cosmetic row
 
+    /// Wraps to a new line instead of running off the edge of the screen —
+    /// a row can hold more items than fit on one line (6+ now that the
+    /// catalog's grown). Chunked eagerly (not a `LazyVGrid`) so every item
+    /// is actually in the view hierarchy regardless of scroll position —
+    /// this whole screen is already one `ScrollView`, so laziness here buys
+    /// nothing but makes rows below the fold invisible to accessibility
+    /// queries (VoiceOver included) until scrolled into view.
     private func cosmeticRow(title: String, items: [CosmeticItem], equipped: String,
                              equip: @escaping (String) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let perRow = 4
+        let rows = stride(from: 0, to: items.count, by: perRow).map { start in
+            Array(items[start..<min(start + perRow, items.count)])
+        }
+        return VStack(alignment: .leading, spacing: 8) {
             StickerChip(text: title, fill: TT.sunshine, textSize: 11)
-            HStack(spacing: 10) {
-                ForEach(items) { item in
-                    cosmeticButton(item: item, isEquipped: item.id == equipped) { equip(item.id) }
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(rows.indices, id: \.self) { rowIndex in
+                    HStack(spacing: 10) {
+                        ForEach(rows[rowIndex]) { item in
+                            cosmeticButton(item: item, isEquipped: item.id == equipped) { equip(item.id) }
+                        }
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Car colors are the one category where the item *is* its own preview
+    /// — show the real swatch instead of a generic letter tile, locked or
+    /// not, rather than making the player guess what "Sky Blue" looks like.
+    private func carColorSwatch(_ id: String) -> Color? {
+        switch id {
+        case "car-cherry": TT.cherry
+        case "car-lime": TT.lime
+        case "car-sunshine": TT.sunshine
+        case "car-grape": TT.grape
+        case "car-sky": TT.sky
+        case "car-tangerine": TT.tangerine
+        default: nil
+        }
     }
 
     private func cosmeticButton(item: CosmeticItem, isEquipped: Bool, action: @escaping () -> Void) -> some View {
@@ -168,22 +207,36 @@ struct GarageView: View {
         } label: {
             VStack(spacing: 3) {
                 ZStack {
-                    Text(String(item.displayName.prefix(1)))
-                        .font(TT.font(18, .black))
-                        .foregroundStyle(unlocked ? (isEquipped ? .white : TT.ink) : TT.ink.opacity(0.3))
+                    if let swatch = carColorSwatch(item.id) {
+                        RoundedRectangle(cornerRadius: 12).fill(swatch)
+                            .opacity(unlocked ? 1 : 0.35)
+                            .frame(width: 52, height: 52)
+                    } else {
+                        Text(String(item.displayName.prefix(1)))
+                            .font(TT.font(18, .black))
+                            .foregroundStyle(unlocked ? (isEquipped ? .white : TT.ink) : TT.ink.opacity(0.3))
+                    }
                     if !unlocked {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(TT.ink.opacity(0.55))
+                            .foregroundStyle(.white)
+                            .shadow(color: TT.ink, radius: 1)
                     }
                 }
                 .frame(width: 52, height: 52)
-                .sticker(RoundedRectangle(cornerRadius: 12), fill: isEquipped ? TT.signGreen : TT.paper)
+                .sticker(RoundedRectangle(cornerRadius: 12),
+                         fill: carColorSwatch(item.id) != nil ? .clear : (isEquipped ? TT.signGreen : TT.paper))
+                .overlay {
+                    if isEquipped, carColorSwatch(item.id) != nil {
+                        RoundedRectangle(cornerRadius: 12).strokeBorder(TT.signGreen, lineWidth: 4)
+                    }
+                }
 
                 Text(item.displayName)
                     .font(TT.font(8, .bold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .frame(width: 60)
 
                 if !unlocked {
@@ -217,6 +270,8 @@ private struct MyGarageCarPreview: View {
         case "car-lime": TT.lime
         case "car-sunshine": TT.sunshine
         case "car-grape": TT.grape
+        case "car-sky": TT.sky
+        case "car-tangerine": TT.tangerine
         default: TT.cherry
         }
     }
@@ -232,6 +287,11 @@ private struct MyGarageCarPreview: View {
                 Text("🔥").font(.system(size: 34)).offset(y: 30)
             } else if decalID == "decal-stars" {
                 Text("⭐️⭐️").font(.system(size: 26)).offset(y: 30)
+            } else if decalID == "decal-racing-stripe" {
+                Rectangle()
+                    .fill(TT.paper)
+                    .frame(width: 20, height: 200)
+                    .overlay(Rectangle().stroke(TT.ink, lineWidth: 2))
             }
 
             if accessoryID == "cartop-surfboard" {
@@ -246,6 +306,12 @@ private struct MyGarageCarPreview: View {
                     .overlay(Capsule().stroke(TT.ink, lineWidth: 2))
                     .frame(width: 34, height: 14)
                     .offset(x: 40, y: -122)
+            } else if accessoryID == "cartop-luggage" {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(TT.asphalt)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(TT.ink, lineWidth: 3))
+                    .frame(width: 70, height: 34)
+                    .offset(y: -130)
             }
         }
         .frame(height: 220)
