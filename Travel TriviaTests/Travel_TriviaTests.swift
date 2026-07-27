@@ -477,3 +477,96 @@ struct EliminationBracketTests {
         #expect(session.state?.player(backseatID)?.strikes == 1)
     }
 }
+
+/// Team Relay: one relay-turn player per squad answers each question,
+/// rotating to the next connected teammate; squads' scores are cumulative.
+@MainActor
+struct TeamRelayTests {
+    let session = PartySession()
+    let hostID = UUID()   // team 0, seat 0
+    let riderID = UUID()  // team 0, seat 1
+    let backseatID = UUID()  // team 1, seat 2
+    let fourthID = UUID()    // team 1, seat 3
+
+    private func startParty(deck: [TriviaQuestion]) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let config = PartyConfig(modeSlug: TeamRelay.modeSlug, modeName: "Team Relay",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 4, requiresEvenPlayers: true)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.debugApplyIntent(.hello(playerID: fourthID, name: "Fourth"))
+        session.assignTeam(0, to: hostID)
+        session.assignTeam(0, to: riderID)
+        session.assignTeam(1, to: backseatID)
+        session.assignTeam(1, to: fourthID)
+        session.startRide()
+        session.startTrip()
+    }
+
+    private func answer(_ playerID: UUID, _ optionID: String) {
+        if playerID == hostID {
+            session.submitLocalAnswer(optionID: optionID)
+        } else {
+            session.debugApplyIntent(.submitAnswer(playerID: playerID, optionID: optionID))
+        }
+    }
+
+    @Test func onlyTheRelayTurnPlayerCanAnswerAndScoresAreCumulativePerSquad() async throws {
+        startParty(deck: Array(SeedQuestions.movieQuoteMashup.prefix(3)))
+        let deck = try #require(session.state?.round?.questions)
+
+        // Turn order is seat order within each squad: host (seat 0) before
+        // rider (seat 1), backseat (seat 2) before fourth (seat 3).
+        #expect(session.state?.round?.teamTurnPlayerID == [hostID, backseatID])
+
+        // Question 1: rider and fourth are off-turn — their taps are no-ops.
+        let q0Correct = try #require(deck[0].correctOptionID)
+        answer(riderID, q0Correct)
+        answer(fourthID, q0Correct)
+        #expect(session.state?.round?.revealing != true)   // ignored, didn't resolve
+
+        answer(hostID, q0Correct)
+        answer(backseatID, q0Correct)
+        await session.debugWaitForAdvance()
+        #expect(session.state?.player(hostID)?.score == 1)
+        #expect(session.state?.player(backseatID)?.score == 1)
+        #expect(session.state?.player(riderID)?.score == 0)
+
+        // Turn rotates to the next connected teammate on each squad.
+        #expect(session.state?.round?.teamTurnPlayerID == [riderID, fourthID])
+
+        // Question 2: rider misses, fourth gets it.
+        let q1Correct = try #require(deck[1].correctOptionID)
+        let q1Wrong = try #require(deck[1].options.first { $0.id != q1Correct })
+        answer(riderID, q1Wrong.id)
+        answer(fourthID, q1Correct)
+        await session.debugWaitForAdvance()
+
+        // Turn rotates back to the squads' first teammate.
+        #expect(session.state?.round?.teamTurnPlayerID == [hostID, backseatID])
+
+        // Question 3: host gets it, backseat misses.
+        let q2Correct = try #require(deck[2].correctOptionID)
+        let q2Wrong = try #require(deck[2].options.first { $0.id != q2Correct })
+        answer(hostID, q2Correct)
+        answer(backseatID, q2Wrong.id)
+        await session.debugWaitForAdvance()
+
+        // Squad totals: team 0 = host(2) + rider(0) = 2; team 1 =
+        // backseat(1) + fourth(1) = 2... make it unambiguous by checking the
+        // actual per-player scores instead of relying on a coin-flip tie.
+        #expect(session.state?.phase == .victory)
+        #expect(session.state?.player(hostID)?.score == 2)
+        #expect(session.state?.player(riderID)?.score == 0)
+        #expect(session.state?.player(backseatID)?.score == 1)
+        #expect(session.state?.player(fourthID)?.score == 1)
+        // Strikes never eliminate a relay player — everyone's still in it.
+        #expect(session.state?.players.allSatisfy { $0.presence == .connected } == true)
+    }
+}
