@@ -48,6 +48,9 @@ final class GameEngine {
     private(set) var playContext: PlayContext = .practice
     /// Genre chip on the riddle card; party games sync the real one.
     private(set) var activeGenreName = "Riddle Realm"
+    /// Same genre, as a slug — needed to resolve the AudioClips/<slug>
+    /// folder for the 3 sound genres' clip playback.
+    private(set) var activeGenreSlug = "riddle-realm"
     /// The mode this party is playing (nil in practice, which is always
     /// plain Three Strikes).
     private(set) var activeModeSlug: String?
@@ -183,7 +186,8 @@ final class GameEngine {
 
     // MARK: - Round lifecycle
 
-    func startGame(seed: UInt64? = nil, pack: [TriviaQuestion] = SeedQuestions.riddleRealm) {
+    func startGame(seed: UInt64? = nil, pack: [TriviaQuestion] = SeedQuestions.riddleRealm,
+                   genreSlug: String = "riddle-realm", genreName: String = "Riddle Realm") {
         if playContext == .partyHost {
             party?.startTrip()
             return
@@ -198,6 +202,8 @@ final class GameEngine {
         var generator: any RandomNumberGenerator = seed.map { SeededGenerator(seed: $0) }
             ?? SystemRandomNumberGenerator()
         questions = pack.map { $0.shufflingOptions(using: &generator) }
+        activeGenreSlug = genreSlug
+        activeGenreName = genreName
         questionIndex = 0
         winner = nil
         userPickedOptionID = nil
@@ -372,6 +378,7 @@ final class GameEngine {
         revealedCorrectOptionID = nil
         winner = nil
         activeGenreName = "Riddle Realm"
+        activeGenreSlug = "riddle-realm"
         activeModeSlug = nil
         wagerWindowActive = false
         userSubmittedWager = nil
@@ -396,6 +403,7 @@ final class GameEngine {
             questionIndex = round.questionIndex
             turnState = round.revealing ? .revealing : .awaitingAnswer
             activeGenreName = round.genreName
+            activeGenreSlug = round.genreSlug
             revealedCorrectOptionID = round.resolvedCorrectOptionID
             curveballPreviewActive = round.curveballPreview
             wagerWindowActive = round.wagerOpen
@@ -510,20 +518,22 @@ final class GameEngine {
     /// default — used to spot-check bundled content packs one genre at a
     /// time without spinning up a real party.
     func debugApplyLaunchArguments(_ arguments: [String]) {
-        let pack: [TriviaQuestion] = {
+        let slug: String = {
             if let i = arguments.firstIndex(of: "-TTGenre"), arguments.count > i + 1,
-               let genrePack = SeedQuestions.packs[arguments[i + 1]] {
-                return genrePack
+               SeedQuestions.packs[arguments[i + 1]] != nil {
+                return arguments[i + 1]
             }
-            return SeedQuestions.riddleRealm
+            return "riddle-realm"
         }()
+        let pack = SeedQuestions.packs[slug] ?? SeedQuestions.riddleRealm
+        let name = ContentCatalog.bundledGenres.first { $0.slug == slug }?.displayName ?? "Riddle Realm"
         if arguments.contains("-TTAutoStart") {
             joinOpenSeat()
-            startGame(seed: 42, pack: pack)
+            startGame(seed: 42, pack: pack, genreSlug: slug, genreName: name)
         }
         if arguments.contains("-TTVictory") {
             joinOpenSeat()
-            startGame(seed: 42, pack: pack)
+            startGame(seed: 42, pack: pack, genreSlug: slug, genreName: name)
             userPlayer?.score = 11
             finishRound()
         }

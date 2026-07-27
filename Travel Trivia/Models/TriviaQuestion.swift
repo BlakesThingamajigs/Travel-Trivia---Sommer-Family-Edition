@@ -30,8 +30,29 @@ nonisolated struct TriviaQuestion: Identifiable, Equatable, Codable, Sendable {
     /// authored answer — whichever option wins the party's vote becomes
     /// correct at resolution time.
     let correctOptionID: String?
+    /// Bundled clip filename (e.g. "cow.m4a") for the 3 audio genres —
+    /// resolved by AudioClipLibrary against the AudioClips/<genre> folders.
+    /// Nil for every text genre.
+    var mediaFileName: String?
+    /// Source credit for `mediaFileName`, required under the CC licenses the
+    /// bundled clips ship under (see AudioSeedQuestions.swift). Surfaced in
+    /// an in-app credits screen is a follow-up, not built yet — tracked here
+    /// so that information is never lost.
+    var attribution: String?
+
+    init(id: String, difficulty: Difficulty, prompt: String, options: [AnswerOption],
+         correctOptionID: String?, mediaFileName: String? = nil, attribution: String? = nil) {
+        self.id = id
+        self.difficulty = difficulty
+        self.prompt = prompt
+        self.options = options
+        self.correctOptionID = correctOptionID
+        self.mediaFileName = mediaFileName
+        self.attribution = attribution
+    }
 
     var isMajorityScored: Bool { correctOptionID == nil }
+    var hasAudioClip: Bool { mediaFileName != nil }
 
     /// Copy with display order shuffled; correctness follows the option id.
     func shufflingOptions(using generator: inout some RandomNumberGenerator) -> TriviaQuestion {
@@ -40,7 +61,9 @@ nonisolated struct TriviaQuestion: Identifiable, Equatable, Codable, Sendable {
             difficulty: difficulty,
             prompt: prompt,
             options: options.shuffled(using: &generator),
-            correctOptionID: correctOptionID
+            correctOptionID: correctOptionID,
+            mediaFileName: mediaFileName,
+            attribution: attribution
         )
     }
 }

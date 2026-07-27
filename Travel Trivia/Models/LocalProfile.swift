@@ -29,7 +29,7 @@ final class LocalProfile {
         didSet { defaults.set(shuffleGenres, forKey: Keys.shuffleGenres) }
     }
 
-    /// Persisted now, routed to real audio in a future session.
+    /// Read by AudioDirector before every clip playback.
     var audioOutput: AudioOutput {
         didSet { defaults.set(audioOutput.rawValue, forKey: Keys.audioOutput) }
     }

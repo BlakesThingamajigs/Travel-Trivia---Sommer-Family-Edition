@@ -12,7 +12,20 @@ import SwiftData
 
 struct QuestionView: View {
     @Environment(GameEngine.self) private var engine
+    @Environment(AppModel.self) private var app
     @State private var scoreboardOpen = false
+
+    /// Auto-plays a sound genre's clip as soon as its question is actually
+    /// visible (matches the "no manual trigger" auto-play design already
+    /// used for narration elsewhere in the vault docs — narration itself
+    /// isn't built yet, so every phone plays its own copy of the clip for
+    /// now).
+    private func presentQuestionIfNeeded() {
+        guard !questionHiddenByCurveball, !wagerChoicePending,
+              engine.turnState == .awaitingAnswer,
+              let question = engine.currentQuestion else { return }
+        app.audio.presentQuestion(question, genreSlug: engine.activeGenreSlug)
+    }
 
     private var userIsOut: Bool {
         engine.userPlayer?.isOut ?? true
@@ -111,6 +124,9 @@ struct QuestionView: View {
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: scoreboardOpen)
         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: userIsOut)
+        .onAppear { presentQuestionIfNeeded() }
+        .onChange(of: engine.currentQuestion?.id) { _, _ in presentQuestionIfNeeded() }
+        .onDisappear { app.audio.stopAll() }
     }
 
     private var header: some View {
@@ -141,6 +157,7 @@ struct QuestionView: View {
 
 private struct RiddleCard: View {
     @Environment(GameEngine.self) private var engine
+    @Environment(AppModel.self) private var app
     var question: TriviaQuestion
 
     private var difficultyColor: Color {
@@ -175,8 +192,11 @@ private struct RiddleCard: View {
                 .font(TT.font(19, .bold))
                 .foregroundStyle(TT.ink)
                 .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+                .frame(maxWidth: .infinity, minHeight: question.hasAudioClip ? 56 : 92, alignment: .topLeading)
                 .accessibilityIdentifier("riddle-prompt")
+            if question.hasAudioClip {
+                replayButton
+            }
         }
         .padding(14)
         .sticker(RoundedRectangle(cornerRadius: 20), fill: TT.paper)
@@ -193,6 +213,28 @@ private struct RiddleCard: View {
             insertion: .move(edge: .trailing).combined(with: .opacity),
             removal: .move(edge: .leading).combined(with: .opacity)))
         .animation(.spring(response: 0.45, dampingFraction: 0.7), value: question.id)
+    }
+
+    /// Lets anyone re-trigger the clip (car noise/engine drowned it out the
+    /// first time) — plays locally on whichever phone taps it, same clip.
+    private var replayButton: some View {
+        Button {
+            guard let url = AudioClipLibrary.url(for: question, genreSlug: engine.activeGenreSlug) else { return }
+            app.audio.playClip(url: url)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: app.audio.isPlayingClip ? "speaker.wave.3.fill" : "arrow.clockwise")
+                    .font(.system(size: 13, weight: .black))
+                Text(app.audio.isPlayingClip ? "PLAYING…" : "REPLAY SOUND")
+                    .font(TT.font(12, .heavy))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .sticker(RoundedRectangle(cornerRadius: 12), fill: TT.skyDeep)
+        }
+        .buttonStyle(.bubble)
+        .accessibilityIdentifier("replay-audio-clip")
     }
 }
 

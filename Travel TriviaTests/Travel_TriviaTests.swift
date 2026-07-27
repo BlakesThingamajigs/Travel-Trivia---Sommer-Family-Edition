@@ -209,10 +209,19 @@ struct SeedContentTests {
         #expect(grownUp.count == 25)
         #expect(grownUp.allSatisfy { $0.difficulty != .easy && $0.id.hasPrefix("mqm-") })
 
-        // Genres with no bundled pack still deal a playable riddle deck.
-        // (superlative-showdown used to be this example, but genre-batch-2
-        // gave it real content — sound-fx-guess still has none.)
-        let fallback = QuestionDeck.deal(genreSlug: "sound-fx-guess", tier: .familyMix, seed: 3)
+        // sound-fx-guess got real bundled content in the audio-genres
+        // session — family-mix allows all 3 difficulties, so the whole
+        // 10-clip pack deals (no genre has an empty tier gap for these 3
+        // audio genres; each pack's easy/medium/hard split covers all of
+        // familyMix, littleOnes, and grownUp with something playable).
+        let soundFX = QuestionDeck.deal(genreSlug: "sound-fx-guess", tier: .familyMix, seed: 3)
+        #expect(soundFX.count == 10)
+        #expect(soundFX.allSatisfy { $0.hasAudioClip })
+
+        // An unrecognized genre slug still deals a playable riddle deck —
+        // every real genre now has bundled content, so this exercises the
+        // fallback path the old test used sound-fx-guess for.
+        let fallback = QuestionDeck.deal(genreSlug: "not-a-real-genre", tier: .familyMix, seed: 3)
         #expect(fallback.count == 16)
     }
 
@@ -248,6 +257,34 @@ struct SeedContentTests {
         for question in questions {
             // 3 escalating clues joined with "\n" -> exactly 2 newlines.
             #expect(question.prompt.filter { $0 == "\n" }.count == 2)
+        }
+    }
+
+    /// The 3 audio genres (Animal Sounds Safari, Sound FX Guess, Name That
+    /// Tune): every question needs a real bundled clip AND its attribution
+    /// — losing either would either silently drop audio or violate the CC
+    /// licenses the clips ship under.
+    @Test func audioGenrePacksHaveClipsAndAttribution() {
+        let packs: [(String, [TriviaQuestion])] = [
+            ("animal-sounds-safari", AudioSeedQuestions.animalSoundsSafari),
+            ("sound-fx-guess", AudioSeedQuestions.soundFXGuess),
+            ("name-that-tune", AudioSeedQuestions.nameThatTune),
+        ]
+        for (slug, questions) in packs {
+            #expect(!questions.isEmpty, "\(slug) should have real bundled questions")
+            for question in questions {
+                #expect(question.hasAudioClip, "\(question.id) is missing its clip")
+                #expect(question.attribution?.isEmpty == false, "\(question.id) is missing attribution")
+                #expect(question.options.count == 6)
+                #expect(question.options.contains { $0.id == question.correctOptionID })
+                #expect(Set(question.options.map(\.id)).count == 6)
+                // Every clip must actually resolve inside the app bundle —
+                // catches a renamed/missing resource at test time instead
+                // of a silent no-op at play time.
+                #expect(AudioClipLibrary.url(for: question, genreSlug: slug) != nil,
+                        "\(question.id)'s clip \(question.mediaFileName ?? "nil") isn't bundled")
+            }
+            #expect(SeedQuestions.packs[slug]?.count == questions.count)
         }
     }
 }

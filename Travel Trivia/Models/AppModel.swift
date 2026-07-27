@@ -33,6 +33,7 @@ final class AppModel {
     let catalog: ContentCatalog
     let party: PartySession
     let engine: GameEngine
+    let audio: AudioDirector
 
     init(engine: GameEngine, profile: LocalProfile = LocalProfile(),
          catalog: ContentCatalog = ContentCatalog(), party: PartySession = PartySession()) {
@@ -40,6 +41,8 @@ final class AppModel {
         self.profile = profile
         self.catalog = catalog
         self.party = party
+        self.audio = AudioDirector(profile: profile)
+        audio.configureSession()
         wireParty()
     }
 

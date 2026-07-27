@@ -101,7 +101,7 @@ final class ContentCatalog {
             guard !liveModes.isEmpty, !liveGenres.isEmpty else { return }
             let rows: [QuestionRow] = try await client
                 .from("questions")
-                .select("id,difficulty,prompt,options,correct_option_id,genres(slug)")
+                .select("id,difficulty,prompt,options,correct_option_id,media_url,attribution,genres(slug)")
                 .execute().value
             modes = liveModes
             genres = liveGenres
@@ -123,16 +123,27 @@ final class ContentCatalog {
         let options: [AnswerOption]
         let correctOptionID: String?
         let genre: GenreRef
+        /// The 3 sound genres only. Live rows carry the original Wikimedia
+        /// Commons (or, once real credentials exist, Freesound/Jamendo) URL
+        /// for provenance; AudioClipLibrary still plays the bundled clip by
+        /// matching mediaFileName, since streaming raw Ogg isn't decodable
+        /// by AVFoundation on iOS.
+        let mediaURL: String?
+        let attribution: String?
 
         enum CodingKeys: String, CodingKey {
             case id, difficulty, prompt, options
             case correctOptionID = "correct_option_id"
             case genre = "genres"
+            case mediaURL = "media_url"
+            case attribution
         }
 
         var asQuestion: TriviaQuestion {
             TriviaQuestion(id: id.uuidString, difficulty: difficulty, prompt: prompt,
-                           options: options, correctOptionID: correctOptionID)
+                           options: options, correctOptionID: correctOptionID,
+                           mediaFileName: mediaURL.flatMap { URL(string: $0)?.lastPathComponent },
+                           attribution: attribution)
         }
     }
 

@@ -23,6 +23,9 @@ nonisolated enum SeedQuestions {
         "superlative-showdown": superlativeShowdown,
         "time-machine": timeMachine,
         "pop-culture-time-capsule": popCultureTimeCapsule,
+        "animal-sounds-safari": AudioSeedQuestions.animalSoundsSafari,
+        "sound-fx-guess": AudioSeedQuestions.soundFXGuess,
+        "name-that-tune": AudioSeedQuestions.nameThatTune,
     ]
 
     /// First authored option is the correct one (shuffled at deal time);
