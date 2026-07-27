@@ -8,6 +8,7 @@
 import Foundation
 import Testing
 import SwiftData
+import AVFoundation
 @testable import Travel_Trivia
 
 /// Keeps the ModelContainer alive for the test's duration — the engine only
@@ -976,5 +977,38 @@ struct ProgressStoreTests {
         #expect(engine.phase == .victory)
         #expect(progress.earnedBadgeIDs.contains(BadgeCatalog.genreCompletionID("riddle-realm")))
         #expect(progress.earnedBadgeIDs.contains(BadgeCatalog.perfectRoundID))
+    }
+}
+
+/// Nav-prompt audio pausing (Part E follow-up): built against
+/// `AVAudioSession.interruptionNotification`, the real signal iOS delivers
+/// to every app — Maps/Waze included — when another app takes the audio
+/// session. Never exercised against a live Maps prompt before (not
+/// triggerable in the simulator), so this posts the same notification the
+/// OS itself posts for a real interruption, with the same userInfo shape,
+/// rather than calling AudioDirector's pause/resume internals directly.
+@MainActor
+struct AudioDirectorInterruptionTests {
+    @Test func realOSInterruptionNotificationPausesAndResumesNarration() async throws {
+        let profile = LocalProfile(defaults: UserDefaults(suiteName: "audio-director-test-\(UUID())")!)
+        let director = AudioDirector(profile: profile)
+
+        director.speak("Testing nav prompt pausing")
+        #expect(director.isSpeaking == true)
+        #expect(director.isInterrupted == false)
+
+        NotificationCenter.default.post(
+            name: AVAudioSession.interruptionNotification, object: nil,
+            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
+        // The handler hops to the main actor via Task { @MainActor in ... };
+        // give it a beat to run before asserting.
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(director.isInterrupted == true)
+
+        NotificationCenter.default.post(
+            name: AVAudioSession.interruptionNotification, object: nil,
+            userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue])
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(director.isInterrupted == false)
     }
 }
