@@ -30,6 +30,14 @@ final class Player {
     var remoteID: UUID?
     var roleRaw: String
     var presenceRaw: String
+    /// Team Relay squad (0 or 1); nil when unassigned or not in that mode.
+    var teamIndex: Int?
+    /// How many wrong answers this player can take before they're out.
+    /// Mode-aware (Elimination Bracket: 1, Team Relay: effectively
+    /// unlimited, everything else: `GameEngine.maxStrikes`) — synced from
+    /// the party's mode so `isOut` reads correctly everywhere. Nil in
+    /// practice, which is always plain Three Strikes.
+    var maxStrikesOverride: Int?
 
     init(name: String, colorIndex: Int, seatIndex: Int, isUser: Bool = false,
          accuracy: Double = 0.65, remoteID: UUID? = nil) {
@@ -56,6 +64,7 @@ final class Player {
     }
 
     var isSeated: Bool { seatIndex != Player.noSeat }
-    var isOut: Bool { strikes >= GameEngine.maxStrikes }
-    var strikesRemaining: Int { max(0, GameEngine.maxStrikes - strikes) }
+    var effectiveMaxStrikes: Int { maxStrikesOverride ?? GameEngine.maxStrikes }
+    var isOut: Bool { strikes >= effectiveMaxStrikes }
+    var strikesRemaining: Int { max(0, effectiveMaxStrikes - strikes) }
 }

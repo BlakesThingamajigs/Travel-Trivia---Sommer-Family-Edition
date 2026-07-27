@@ -169,7 +169,8 @@ struct CreateGameFlow: View {
               let difficulty = selectedDifficulty, !trimmedName.isEmpty else { return }
         let config = PartyConfig(modeSlug: mode.slug, modeName: mode.displayName,
                                  genreSlug: genre.slug, genreName: genre.displayName,
-                                 difficulty: difficulty, minPlayers: mode.minPlayers)
+                                 difficulty: difficulty, minPlayers: mode.minPlayers,
+                                 requiresEvenPlayers: mode.requiresEvenPlayers)
         app.hostParty(partyName: trimmedName, code: code, config: config)
     }
 }

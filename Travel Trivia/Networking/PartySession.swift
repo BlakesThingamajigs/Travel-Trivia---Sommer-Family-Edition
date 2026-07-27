@@ -71,6 +71,7 @@ final class PartySession: NSObject {
     var revealDuration: Duration = .seconds(1.9)
     var nobodyConnectedDelay: Duration = .seconds(1.1)
     var curveballPreviewDuration: Duration = CopilotsCurveball.previewDuration
+    var wagerDuration: Duration = DoubleOrNothing.wagerWindow
     var disconnectGrace: Duration = PartyWire.disconnectGrace
     var joinTimeout: Duration = .seconds(12)
     /// Heartbeat cadence and how long silence counts as a dropout.
@@ -100,6 +101,7 @@ final class PartySession: NSObject {
     @ObservationIgnored private var graceTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var advanceTask: Task<Void, Never>?
     @ObservationIgnored private var curveballTask: Task<Void, Never>?
+    @ObservationIgnored private var wagerTask: Task<Void, Never>?
     @ObservationIgnored private var joinTimeoutTask: Task<Void, Never>?
     @ObservationIgnored private var rejoinTask: Task<Void, Never>?
 
@@ -128,6 +130,11 @@ final class PartySession: NSObject {
         guard !suppressesNetworking else { return }
         #endif
         startAdvertising()
+        // Also browse while hosting so a partitioned-but-alive host can spot
+        // a promoted backup's higher-epoch ad of the *same* party and
+        // concede, instead of two hosts advertising forever (see
+        // handleFoundPeerAsHost).
+        startBrowsing()
         startHeartbeat()
     }
 
@@ -230,6 +237,17 @@ final class PartySession: NSObject {
         }
     }
 
+    /// Double or Nothing: lock in a wager while the current bonus question's
+    /// window is open.
+    func submitLocalWager(amount: Int) {
+        guard let localPlayerID else { return }
+        if isHost {
+            applyIntent(.submitWager(playerID: localPlayerID, amount: amount))
+        } else if let hostPeer {
+            send(.intent(.submitWager(playerID: localPlayerID, amount: amount)), to: [hostPeer])
+        }
+    }
+
     // MARK: - Host-only party controls
 
     /// Cycle/assign the pilot & copilot roles from the lobby. Roles are
@@ -247,6 +265,17 @@ final class PartySession: NSObject {
         }
     }
 
+    /// Team Relay: assign (or clear, passing nil) a rider's squad from the
+    /// lobby. Unlike pilot/copilot, teams aren't mutually exclusive slots —
+    /// the toggle-off decision is made by the caller.
+    func assignTeam(_ team: Int?, to playerID: UUID) {
+        guard isHost else { return }
+        mutateState { s in
+            guard let i = s.players.firstIndex(where: { $0.id == playerID }) else { return }
+            s.players[i].teamIndex = team
+        }
+    }
+
     /// Lobby → Our Ride seat picking.
     func startRide() {
         guard isHost else { return }
@@ -259,6 +288,7 @@ final class PartySession: NSObject {
         guard isHost, var s = state, let dealDeck else { return }
         advanceTask?.cancel()
         curveballTask?.cancel()
+        wagerTask?.cancel()
         pendingAnswers = [:]
 
         var takenSeats = Set(s.players.compactMap(\.seatIndex))
@@ -272,6 +302,7 @@ final class PartySession: NSObject {
             s.players[i].score = 0
             s.players[i].strikes = 0
             s.players[i].lastAnswerCorrect = nil
+            s.players[i].pendingWager = nil
         }
 
         let dealt = dealDeck(s.config)
@@ -279,8 +310,43 @@ final class PartySession: NSObject {
                              genreSlug: dealt.genreSlug,
                              genreName: dealt.genreName)
         s.phase = .playing
+        if s.config.modeSlug == TeamRelay.modeSlug {
+            initializeTeamRelayTurns(&s)
+        }
         commit(s)
         holdIfNobodyCanAnswer()
+    }
+
+    /// Team Relay: seat the first connected teammate (by seat order) of each
+    /// squad into the relay turn.
+    private func initializeTeamRelayTurns(_ s: inout PartyState) {
+        for team in 0...1 {
+            let members = s.players
+                .filter { $0.teamIndex == team && $0.presence == .connected }
+                .sorted { ($0.seatIndex ?? .max) < ($1.seatIndex ?? .max) }
+            s.round?.teamTurnPlayerID[team] = members.first?.id
+        }
+    }
+
+    /// Team Relay: rotate each squad's turn to the next connected teammate
+    /// in seat order, wrapping around.
+    private func advanceTeamRelayTurns(_ s: inout PartyState) {
+        guard s.config.modeSlug == TeamRelay.modeSlug else { return }
+        for team in 0...1 {
+            let members = s.players
+                .filter { $0.teamIndex == team && $0.presence == .connected }
+                .sorted { ($0.seatIndex ?? .max) < ($1.seatIndex ?? .max) }
+            guard !members.isEmpty else {
+                s.round?.teamTurnPlayerID[team] = nil
+                continue
+            }
+            if let current = s.round?.teamTurnPlayerID[team],
+               let index = members.firstIndex(where: { $0.id == current }) {
+                s.round?.teamTurnPlayerID[team] = members[(index + 1) % members.count].id
+            } else {
+                s.round?.teamTurnPlayerID[team] = members.first?.id
+            }
+        }
     }
 
     /// Victory screen → back to the seat picker for another game.
@@ -288,6 +354,7 @@ final class PartySession: NSObject {
         guard isHost else { return }
         advanceTask?.cancel()
         curveballTask?.cancel()
+        wagerTask?.cancel()
         pendingAnswers = [:]
         mutateState { s in
             s.round = nil
@@ -304,7 +371,8 @@ final class PartySession: NSObject {
         guard isHost else { return }
         switch intent {
         case .hello(let playerID, _), .requestSeat(let playerID, _),
-             .submitAnswer(let playerID, _), .goodbye(let playerID):
+             .submitAnswer(let playerID, _), .submitWager(let playerID, _),
+             .goodbye(let playerID):
             markSeen(playerID)
         }
         switch intent {
@@ -323,6 +391,9 @@ final class PartySession: NSObject {
 
         case .submitAnswer(let playerID, let optionID):
             recordAnswer(playerID: playerID, optionID: optionID)
+
+        case .submitWager(let playerID, let amount):
+            recordWager(playerID: playerID, amount: amount)
 
         case .goodbye(let playerID):
             graceTasks[playerID]?.cancel()
@@ -419,17 +490,25 @@ final class PartySession: NSObject {
     // MARK: - Host authority: round logic
 
     /// Players the current question waits on: connected and still in it.
+    /// Team Relay narrows this to just the two riders whose relay turn it
+    /// is — everyone else's tap is a no-op (recordAnswer rejects it below).
     private var answerGate: [UUID] {
         guard let s = state, s.phase == .playing, let round = s.round,
-              !round.revealing, !round.curveballPreview else { return [] }
+              !round.revealing, !round.curveballPreview, !round.wagerOpen else { return [] }
+        if s.config.modeSlug == TeamRelay.modeSlug {
+            return round.teamTurnPlayerID.compactMap { $0 }.filter { id in
+                s.player(id)?.presence == .connected
+            }
+        }
+        let threshold = Elimination.maxStrikes(modeSlug: s.config.modeSlug)
         return s.players
-            .filter { $0.presence == .connected && $0.strikes < GameEngine.maxStrikes }
+            .filter { $0.presence == .connected && $0.strikes < threshold }
             .map(\.id)
     }
 
     private func recordAnswer(playerID: UUID, optionID: String) {
         guard let s = state, s.phase == .playing, let round = s.round,
-              !round.revealing, !round.curveballPreview,
+              !round.revealing, !round.curveballPreview, !round.wagerOpen,
               round.questions.indices.contains(round.questionIndex),
               pendingAnswers[playerID] == nil,
               answerGate.contains(playerID),
@@ -437,6 +516,19 @@ final class PartySession: NSObject {
         else { return }
         pendingAnswers[playerID] = optionID
         resolveIfEveryoneAnswered()
+    }
+
+    /// Double or Nothing: lock in a wager while the bonus question's window
+    /// is open. Clamped to what the player can actually afford.
+    private func recordWager(playerID: UUID, amount: Int) {
+        guard let s = state, s.phase == .playing, s.round?.wagerOpen == true,
+              let player = s.player(playerID), player.presence == .connected
+        else { return }
+        let clamped = max(0, min(amount, player.score))
+        mutateState { st in
+            guard let i = st.players.firstIndex(where: { $0.id == playerID }) else { return }
+            st.players[i].pendingWager = clamped
+        }
     }
 
     private func resolveIfEveryoneAnswered() {
@@ -451,16 +543,35 @@ final class PartySession: NSObject {
         let question = round.questions[round.questionIndex]
 
         // Authored questions grade against their fixed answer; prediction
-        // questions (Would You Rather — and Herd Reveal later) grade against
-        // whichever option won the car's vote.
-        let correctID = question.correctOptionID
-            ?? MajorityVote.winningOptionID(votes: pendingAnswers.values, options: question.options)
+        // questions (Would You Rather) grade against whichever option won
+        // the car's vote — and Herd Reveal forces that same majority path
+        // even when the question does have an authored answer, since the
+        // whole point of the mode is scoring popularity, not correctness.
+        let correctID: String?
+        if s.config.modeSlug == HerdReveal.modeSlug {
+            correctID = MajorityVote.winningOptionID(votes: pendingAnswers.values, options: question.options)
+        } else {
+            correctID = question.correctOptionID
+                ?? MajorityVote.winningOptionID(votes: pendingAnswers.values, options: question.options)
+        }
+
+        // Double or Nothing: every Nth question settles against the
+        // player's wager instead of the flat +1/strike — correct doubles
+        // it (net +wager), wrong subtracts it, floored at zero. No strike:
+        // wagering isn't an elimination risk.
+        let isWagerQuestion = s.config.modeSlug == DoubleOrNothing.modeSlug
+            && DoubleOrNothing.isWagerIndex(round.questionIndex)
 
         for i in s.players.indices {
             guard let answer = pendingAnswers[s.players[i].id] else { continue }
             let correct = answer == correctID
             s.players[i].lastAnswerCorrect = correct
-            if correct {
+            if isWagerQuestion {
+                let wager = s.players[i].pendingWager ?? 0
+                s.players[i].score = correct ? s.players[i].score + wager
+                                              : max(0, s.players[i].score - wager)
+                s.players[i].pendingWager = nil
+            } else if correct {
                 s.players[i].score += 1
             } else {
                 s.players[i].strikes += 1
@@ -490,13 +601,16 @@ final class PartySession: NSObject {
         s.round?.revealing = false
         s.round?.resolvedCorrectOptionID = nil
 
-        let alive = s.players.filter { $0.strikes < GameEngine.maxStrikes && $0.presence != .left }
+        let threshold = Elimination.maxStrikes(modeSlug: s.config.modeSlug)
+        let alive = s.players.filter { $0.strikes < threshold && $0.presence != .left }
         let deckExhausted = round.questionIndex + 1 >= round.questions.count
         if alive.count <= 1 || deckExhausted {
             finishRound(&s)
         } else {
             s.round?.questionIndex = round.questionIndex + 1
+            advanceTeamRelayTurns(&s)
             beginCurveballPreviewIfDue(&s)
+            beginWagerWindowIfDue(&s)
         }
         commit(s)
         holdIfNobodyCanAnswer()
@@ -536,12 +650,69 @@ final class PartySession: NSObject {
         holdIfNobodyCanAnswer()
     }
 
+    // MARK: - Double or Nothing
+
+    /// Every Nth question opens with a window where players lock in a
+    /// wager against their current score before the question is answerable
+    /// — mirrors Copilot's Curveball's fixed preview window (no early
+    /// close on "everyone's wagered" to keep the mechanic simple).
+    private func beginWagerWindowIfDue(_ s: inout PartyState) {
+        guard s.config.modeSlug == DoubleOrNothing.modeSlug,
+              let index = s.round?.questionIndex,
+              DoubleOrNothing.isWagerIndex(index)
+        else { return }
+        s.round?.wagerOpen = true
+        scheduleWagerEnd()
+    }
+
+    private func scheduleWagerEnd() {
+        wagerTask?.cancel()
+        let window = wagerDuration
+        wagerTask = Task { [weak self] in
+            try? await Task.sleep(for: window)
+            guard let self, !Task.isCancelled else { return }
+            self.endWagerWindow()
+        }
+    }
+
+    private func endWagerWindow() {
+        guard state?.round?.wagerOpen == true else { return }
+        mutateState { $0.round?.wagerOpen = false }
+        // The gate just opened; if nobody connected can answer, keep moving.
+        holdIfNobodyCanAnswer()
+    }
+
     private func finishRound(_ s: inout PartyState) {
+        if s.config.modeSlug == TeamRelay.modeSlug {
+            finishTeamRelayRound(&s)
+            return
+        }
         // Same rules as the practice engine: last one standing, else score,
         // fewer strikes breaks ties, front seat wins dead heats.
-        let alive = s.players.filter { $0.strikes < GameEngine.maxStrikes && $0.presence != .left }
+        let threshold = Elimination.maxStrikes(modeSlug: s.config.modeSlug)
+        let alive = s.players.filter { $0.strikes < threshold && $0.presence != .left }
         let pool = alive.isEmpty ? s.players : alive
         let winner = pool.max { a, b in
+            if a.score != b.score { return a.score < b.score }
+            if a.strikes != b.strikes { return a.strikes > b.strikes }
+            return (a.seatIndex ?? .max) > (b.seatIndex ?? .max)
+        }
+        s.round?.winnerID = winner?.id
+        s.phase = .victory
+    }
+
+    /// Team Relay: cumulative squad totals decide it, not individual
+    /// standing. `winnerID` still needs a single player (the victory
+    /// screen shows one avatar), so it's the winning squad's top scorer —
+    /// fewest strikes, then front seat, breaks ties, same as everywhere
+    /// else.
+    private func finishTeamRelayRound(_ s: inout PartyState) {
+        let team0Total = s.players.filter { $0.teamIndex == 0 }.reduce(0) { $0 + $1.score }
+        let team1Total = s.players.filter { $0.teamIndex == 1 }.reduce(0) { $0 + $1.score }
+        let winningTeam = team1Total > team0Total ? 1 : 0
+        let pool = s.players.filter { $0.teamIndex == winningTeam }
+        let fallbackPool = pool.isEmpty ? s.players : pool
+        let winner = fallbackPool.max { a, b in
             if a.score != b.score { return a.score < b.score }
             if a.strikes != b.strikes { return a.strikes > b.strikes }
             return (a.seatIndex ?? .max) > (b.seatIndex ?? .max)
@@ -555,7 +726,7 @@ final class PartySession: NSObject {
     /// so the round never stalls — mirrors the practice spectator flow.
     private func holdIfNobodyCanAnswer() {
         guard let s = state, s.phase == .playing, let round = s.round,
-              !round.revealing, !round.curveballPreview else { return }
+              !round.revealing, !round.curveballPreview, !round.wagerOpen else { return }
         guard answerGate.isEmpty else { return }
         scheduleAdvance(after: nobodyConnectedDelay)
     }
@@ -808,6 +979,14 @@ final class PartySession: NSObject {
     }
 
     private func handleFoundPeer(_ peerID: MCPeerID, info: [String: String]?) {
+        // A partitioned-but-alive host browses too (see `host()`) purely to
+        // watch for a promoted backup's higher-epoch ad of its own party —
+        // it never invites anyone, joiners' invite flow below doesn't apply.
+        if isHost {
+            handleFoundPeerAsHost(info: info)
+            return
+        }
+
         guard status == .searching || status == .connecting || status == .reconnecting,
               let joinTarget, let info,
               info["name"] == joinTarget.name.lowercased(),
@@ -825,6 +1004,48 @@ final class PartySession: NSObject {
         guard let context = try? JSONEncoder().encode(request) else { return }
         if status == .searching { status = .connecting }
         browser?.invitePeer(peerID, to: mcSession, withContext: context, timeout: 15)
+    }
+
+    /// A network partition (or a slow phone) can leave a stale host still
+    /// advertising while the mesh has already promoted a backup host over a
+    /// higher epoch (see PartySession's file comment + `promoteToHost`).
+    /// Joiners already resolve that correctly by picking the highest epoch
+    /// they see; this closes the other half — the *stale* host itself spots
+    /// the rival ad for its own party+code and concedes rather than
+    /// advertising a dead epoch forever.
+    private func handleFoundPeerAsHost(info: [String: String]?) {
+        guard let state, let info,
+              info["name"] == state.partyName.lowercased(),
+              info["code"] == state.code,
+              let rivalEpoch = Int(info["epoch"] ?? "0"),
+              rivalEpoch > state.epoch
+        else { return }
+        demoteToClient()
+    }
+
+    /// Concede to the higher-epoch host: stop advertising, tear down as
+    /// host, and try to rejoin the party as an ordinary client.
+    private func demoteToClient() {
+        guard isHost, let state, let localPlayerID else { return }
+        let partyName = state.partyName
+        let code = state.code
+        let playerName = localName
+        advertiser?.stopAdvertisingPeer()
+        advertiser = nil
+        teardown(keepingState: false)
+        #if DEBUG
+        guard !suppressesNetworking else {
+            // Headless test seam: assert the demotion decision itself
+            // without opening real Multipeer sockets — see
+            // debugSimulateRivalHostAd below.
+            self.localPlayerID = localPlayerID
+            localName = playerName
+            joinTarget = (partyName, code)
+            status = .searching
+            return
+        }
+        #endif
+        join(partyName: partyName, code: code, playerID: localPlayerID, playerName: playerName)
     }
 
     // MARK: - Plumbing
@@ -873,6 +1094,7 @@ final class PartySession: NSObject {
     private func teardown(keepingState: Bool) {
         advanceTask?.cancel()
         curveballTask?.cancel()
+        wagerTask?.cancel()
         joinTimeoutTask?.cancel()
         rejoinTask?.cancel()
         rejoinTask = nil
@@ -916,6 +1138,24 @@ final class PartySession: NSObject {
 
     func debugWaitForCurveballWindow() async {
         await curveballTask?.value
+    }
+
+    func debugWaitForWagerWindow() async {
+        await wagerTask?.value
+    }
+
+    /// Headless host-partition test seam: feed the same rival-advertisement
+    /// info a real MCNearbyServiceBrowser would hand `handleFoundPeer`,
+    /// without opening any real Multipeer sockets. Verifies the *decision*
+    /// to demote (see `handleFoundPeerAsHost`/`demoteToClient`) — it does
+    /// not exercise the real rejoin-over-the-mesh path, which needs an
+    /// actual network partition to test for real.
+    func debugSimulateRivalHostAd(epoch: Int, name: String? = nil, code: String? = nil) {
+        guard let state else { return }
+        let info = ["name": (name ?? state.partyName).lowercased(),
+                    "code": code ?? state.code,
+                    "epoch": String(epoch)]
+        handleFoundPeerAsHost(info: info)
     }
     #endif
 }

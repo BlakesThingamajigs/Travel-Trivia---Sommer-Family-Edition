@@ -31,12 +31,27 @@ struct QuestionView: View {
         engine.curveballPreviewActive && !engine.localPlayerIsCopilot
     }
 
+    /// Double or Nothing: the wager round's lock-in window is open and the
+    /// local player (still in it) hasn't chosen yet — the question stays
+    /// covered until they wager, same shape as the curveball cover.
+    private var wagerChoicePending: Bool {
+        engine.wagerWindowActive && engine.userSubmittedWager == nil
+            && !(engine.userPlayer?.isOut ?? true)
+    }
+
     var body: some View {
         VStack(spacing: 10) {
             header
 
             if questionHiddenByCurveball {
                 CurveballCover()
+                Spacer(minLength: 8)
+                AvatarStrip()
+                Spacer(minLength: 8)
+            } else if wagerChoicePending {
+                WagerPromptCard(score: engine.userPlayer?.score ?? 0) { amount in
+                    engine.submitLocalWager(amount)
+                }
                 Spacer(minLength: 8)
                 AvatarStrip()
                 Spacer(minLength: 8)
@@ -58,6 +73,13 @@ struct QuestionView: View {
                 if userIsOut {
                     StickerChip(text: "YOU'RE OUT — ENJOY THE RIDE!",
                                 fill: TT.cherry, textColor: .white, textSize: 13)
+                        .transition(.scale.combined(with: .opacity))
+                } else if engine.wagerWindowActive {
+                    StickerChip(text: "WAGER LOCKED IN — WAITING FOR THE CAR…",
+                                fill: TT.grape, textColor: .white, textSize: 12)
+                        .transition(.scale.combined(with: .opacity))
+                } else if engine.isTeamRelayMode && !engine.isMyTurnInTeamRelay {
+                    StickerChip(text: "TEAMMATE'S TURN…", fill: TT.paper, textSize: 12)
                         .transition(.scale.combined(with: .opacity))
                 } else if lockedIn {
                     StickerChip(text: "LOCKED IN — WAITING FOR THE CAR…",
@@ -140,8 +162,11 @@ private struct RiddleCard: View {
                     StickerChip(text: "CURVEBALL!", fill: TT.tangerine,
                                 textColor: .white, textSize: 11)
                         .rotationEffect(.degrees(-4))
-                } else if question.isMajorityScored {
+                } else if question.isMajorityScored || engine.isHerdRevealMode {
                     StickerChip(text: "CAR VOTES", fill: TT.sky,
+                                textColor: .white, textSize: 11)
+                } else if engine.currentQuestionIsWager {
+                    StickerChip(text: "DOUBLE OR NOTHING!", fill: TT.grape,
                                 textColor: .white, textSize: 11)
                 }
                 Spacer()
@@ -207,6 +232,55 @@ nonisolated struct BubbleTail: Shape {
                           control: CGPoint(x: rect.midX, y: rect.maxY))
         path.closeSubpath()
         return path
+    }
+}
+
+/// Double or Nothing's wager step: pick how much of the current score to
+/// risk on the bonus question before it opens — mirrors CurveballCover's
+/// shape (a full-bleed card standing in for the question) but with three
+/// wager choices instead of a passive wait.
+private struct WagerPromptCard: View {
+    var score: Int
+    var choose: (Int) -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "dice.fill")
+                .font(.system(size: 30, weight: .black))
+                .foregroundStyle(.white)
+            StickerText(text: "DOUBLE OR NOTHING!", size: 26)
+            Text("Wager some of your \(score) points.\nRight doubles it back, wrong takes it away.")
+                .font(TT.font(15, .bold))
+                .foregroundStyle(TT.ink)
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 10) {
+                wagerButton("BANK IT", amount: 0)
+                wagerButton("HALF", amount: score / 2)
+                wagerButton("ALL IN", amount: score)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, minHeight: 220)
+        .sticker(RoundedRectangle(cornerRadius: 20), fill: TT.grape)
+        .accessibilityIdentifier("wager-prompt")
+        .transition(.scale.combined(with: .opacity))
+    }
+
+    private func wagerButton(_ label: String, amount: Int) -> some View {
+        Button {
+            choose(amount)
+        } label: {
+            VStack(spacing: 2) {
+                Text(label).font(TT.font(13, .heavy))
+                Text("\(amount)").font(TT.font(11, .bold))
+            }
+            .foregroundStyle(TT.ink)
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .sticker(RoundedRectangle(cornerRadius: 14), fill: TT.sunshine)
+        }
+        .buttonStyle(.bubble)
+        .accessibilityIdentifier("wager-\(amount == 0 ? "bank" : (amount == score ? "all-in" : "half"))")
     }
 }
 
@@ -279,7 +353,10 @@ struct StrikePips: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            ForEach(0..<GameEngine.maxStrikes, id: \.self) { i in
+            // Team Relay's threshold is effectively unlimited (strikes never
+            // eliminate a relay player) — cap the pip row at the classic
+            // three so it can't blow up into an unbounded ForEach.
+            ForEach(0..<min(player.effectiveMaxStrikes, GameEngine.maxStrikes), id: \.self) { i in
                 ZStack {
                     Circle()
                         .fill(i < player.strikes ? TT.cherry : TT.paper)
@@ -333,6 +410,8 @@ private struct AnswerButton: View {
     private var userCanAnswer: Bool {
         engine.turnState == .awaitingAnswer
             && !engine.curveballPreviewActive
+            && !engine.wagerWindowActive
+            && engine.isMyTurnInTeamRelay
             && engine.userPickedOptionID == nil
             && !(engine.userPlayer?.isOut ?? true)
     }

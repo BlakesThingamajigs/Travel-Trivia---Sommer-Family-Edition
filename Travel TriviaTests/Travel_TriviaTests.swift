@@ -292,6 +292,7 @@ struct PartySessionHostTests {
         session.revealDuration = .zero
         session.nobodyConnectedDelay = .zero
         session.curveballPreviewDuration = .zero
+        session.wagerDuration = .zero
         session.dealDeck = { _ in (deck, genreSlug, genreSlug) }
 
         let config = PartyConfig(modeSlug: modeSlug, modeName: modeSlug,
@@ -393,5 +394,86 @@ struct PartySessionHostTests {
         // No copilot in the car — the twist can't happen, play stays normal.
         #expect(session.state?.round?.questionIndex == 3)
         #expect(session.state?.round?.curveballPreview == false)
+    }
+}
+
+/// Elimination Bracket: sudden death — one wrong answer is out (not three),
+/// eliminated players stay visible (spectators) instead of leaving, and the
+/// round ends the moment one player remains.
+@MainActor
+struct EliminationBracketTests {
+    let session = PartySession()
+    let hostID = UUID()
+    let riderID = UUID()
+    let backseatID = UUID()
+
+    private func startParty(deck: [TriviaQuestion]) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let config = PartyConfig(modeSlug: Elimination.bracketModeSlug, modeName: "Elimination Bracket",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 4)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.startRide()
+        session.startTrip()
+    }
+
+    private func answer(_ playerID: UUID, _ optionID: String) {
+        if playerID == hostID {
+            session.submitLocalAnswer(optionID: optionID)
+        } else {
+            session.debugApplyIntent(.submitAnswer(playerID: playerID, optionID: optionID))
+        }
+    }
+
+    @Test func oneWrongAnswerEliminatesImmediatelyAndSpectatorsStayVisible() async throws {
+        startParty(deck: Array(SeedQuestions.movieQuoteMashup.prefix(3)))
+        let deck = try #require(session.state?.round?.questions)
+
+        // Question 1: everybody answers correctly — nobody is out, play
+        // continues normally.
+        let q0Correct = try #require(deck[0].correctOptionID)
+        answer(hostID, q0Correct)
+        answer(riderID, q0Correct)
+        answer(backseatID, q0Correct)
+        await session.debugWaitForAdvance()
+        #expect(session.state?.phase == .playing)
+        #expect(session.state?.player(hostID)?.strikes == 0)
+        #expect(session.state?.player(riderID)?.strikes == 0)
+        #expect(session.state?.player(backseatID)?.strikes == 0)
+
+        // Question 2: backseat misses — one strike is enough to be out.
+        let q1Correct = try #require(deck[1].correctOptionID)
+        let q1Wrong = try #require(deck[1].options.first { $0.id != q1Correct })
+        answer(hostID, q1Correct)
+        answer(riderID, q1Correct)
+        answer(backseatID, q1Wrong.id)
+        await session.debugWaitForAdvance()
+
+        #expect(session.state?.player(backseatID)?.strikes == 1)
+        // Still a full member of the roster (spectator), not removed.
+        #expect(session.state?.players.count == 3)
+        #expect(session.state?.player(backseatID)?.presence == .connected)
+        // The round keeps moving — backseat is no longer part of the gate.
+        #expect(session.state?.phase == .playing)
+
+        // Question 3: rider also misses — down to one player standing, so
+        // the round ends immediately even with a question left in the deck.
+        let q2Correct = try #require(deck[2].correctOptionID)
+        let q2Wrong = try #require(deck[2].options.first { $0.id != q2Correct })
+        answer(hostID, q2Correct)
+        answer(riderID, q2Wrong.id)
+        await session.debugWaitForAdvance()
+
+        #expect(session.state?.phase == .victory)
+        #expect(session.state?.round?.winnerID == hostID)
+        #expect(session.state?.player(hostID)?.score == 3)
+        #expect(session.state?.player(riderID)?.strikes == 1)
+        #expect(session.state?.player(backseatID)?.strikes == 1)
     }
 }

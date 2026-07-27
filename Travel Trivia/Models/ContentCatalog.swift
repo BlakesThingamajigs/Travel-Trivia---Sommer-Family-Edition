@@ -32,7 +32,13 @@ nonisolated struct GameMode: Identifiable, Equatable, Codable, Sendable {
 
     /// Modes with real gameplay behind them so far.
     var isPlayable: Bool {
-        slug == "three-strikes" || slug == CopilotsCurveball.modeSlug
+        switch slug {
+        case "three-strikes", CopilotsCurveball.modeSlug, Elimination.bracketModeSlug,
+             TeamRelay.modeSlug, HerdReveal.modeSlug, DoubleOrNothing.modeSlug:
+            true
+        default:
+            false
+        }
     }
 }
 

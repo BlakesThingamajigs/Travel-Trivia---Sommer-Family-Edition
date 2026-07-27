@@ -54,6 +54,15 @@ final class GameEngine {
     /// Copilot's Curveball: the current question is in its early-reveal
     /// window — only the copilot's device may show it.
     private(set) var curveballPreviewActive = false
+    /// Double or Nothing: the current (bonus) question is inside its
+    /// wager lock-in window — no answers are accepted yet.
+    private(set) var wagerWindowActive = false
+    /// The wager the local player locked in for the window currently open
+    /// (or just closed), so the UI can show "locked in" instead of asking
+    /// again. Reset whenever the question index moves.
+    private(set) var userSubmittedWager: Int?
+    /// Team Relay: whose turn it is to answer for each squad (index 0/1).
+    private(set) var teamTurnPlayerIDs: [UUID?] = [nil, nil]
 
     /// Increment-to-fire animation triggers observed by the screens.
     private(set) var confettiTrigger = 0
@@ -109,6 +118,32 @@ final class GameEngine {
         isCurveballMode && CopilotsCurveball.isCurveballIndex(questionIndex)
     }
     var localPlayerIsCopilot: Bool { userPlayer?.role == .copilot }
+
+    // MARK: - Herd Reveal / Team Relay / Double or Nothing
+
+    var isHerdRevealMode: Bool { activeModeSlug == HerdReveal.modeSlug }
+    var isTeamRelayMode: Bool { activeModeSlug == TeamRelay.modeSlug }
+    var isDoubleOrNothingMode: Bool { activeModeSlug == DoubleOrNothing.modeSlug }
+    var currentQuestionIsWager: Bool {
+        isDoubleOrNothingMode && DoubleOrNothing.isWagerIndex(questionIndex)
+    }
+    /// Team Relay: is it the local player's turn to answer for their squad?
+    /// True outside Team Relay so every other mode's answer gating is
+    /// unaffected.
+    var isMyTurnInTeamRelay: Bool {
+        guard isTeamRelayMode, let localPlayerID else { return true }
+        return teamTurnPlayerIDs.contains(localPlayerID)
+    }
+    func teamScore(_ team: Int) -> Int {
+        players.filter { $0.teamIndex == team }.reduce(0) { $0 + $1.score }
+    }
+
+    /// Local player locks in a wager during Double or Nothing's window.
+    func submitLocalWager(_ amount: Int) {
+        guard playContext != .practice, wagerWindowActive, userSubmittedWager == nil else { return }
+        userSubmittedWager = amount
+        party?.submitLocalWager(amount: amount)
+    }
 
     var userPlayer: Player? { players.first(where: \.isUser) }
     var alivePlayers: [Player] { players.filter { !$0.isOut } }
@@ -187,6 +222,8 @@ final class GameEngine {
         guard phase == .playing,
               turnState == .awaitingAnswer,
               !curveballPreviewActive,
+              !wagerWindowActive,
+              isMyTurnInTeamRelay,
               userPickedOptionID == nil,
               let user = userPlayer, !user.isOut,
               let question = currentQuestion,
@@ -336,6 +373,9 @@ final class GameEngine {
         winner = nil
         activeGenreName = "Riddle Realm"
         activeModeSlug = nil
+        wagerWindowActive = false
+        userSubmittedWager = nil
+        teamTurnPlayerIDs = [nil, nil]
         phase = .ride
     }
 
@@ -358,6 +398,8 @@ final class GameEngine {
             activeGenreName = round.genreName
             revealedCorrectOptionID = round.resolvedCorrectOptionID
             curveballPreviewActive = round.curveballPreview
+            wagerWindowActive = round.wagerOpen
+            teamTurnPlayerIDs = round.teamTurnPlayerID
             winner = round.winnerID.flatMap { id in players.first { $0.remoteID == id } }
         } else {
             questions = []
@@ -365,6 +407,8 @@ final class GameEngine {
             turnState = .awaitingAnswer
             revealedCorrectOptionID = nil
             curveballPreviewActive = false
+            wagerWindowActive = false
+            teamTurnPlayerIDs = [nil, nil]
             winner = nil
         }
 
@@ -380,11 +424,13 @@ final class GameEngine {
         }
         if let round, round.questionIndex != lastSyncedQuestionIndex {
             userPickedOptionID = nil
+            userSubmittedWager = nil
         }
         if state.epoch != lastSyncedEpoch, round?.revealing != true {
             // Host migration mid-question: in-flight answers died with the
             // old host, so unlock the local pick for a re-tap.
             userPickedOptionID = nil
+            userSubmittedWager = nil
         }
         if state.phase == .victory, lastSyncedPhase != .victory {
             confettiTrigger += 1
@@ -436,6 +482,8 @@ final class GameEngine {
             row.lastAnswerCorrect = remote.lastAnswerCorrect
             row.role = remote.role
             row.presence = remote.presence
+            row.teamIndex = remote.teamIndex
+            row.maxStrikesOverride = Elimination.maxStrikes(modeSlug: state.config.modeSlug)
             synced.append(row)
         }
         for (_, orphan) in rows {
