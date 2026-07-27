@@ -2,10 +2,15 @@
 //  GameEngine.swift
 //  Travel Trivia
 //
-//  Three Strikes round logic for the single-device slice. Every alive
-//  player answers each question "simultaneously" — the user by tapping,
-//  simulated players by an accuracy roll — matching the real multiplayer
-//  semantics the Multipeer version will have.
+//  The screens' single source of round truth, in one of two contexts:
+//
+//  - practice: the session-1 single-device slice — every alive player
+//    answers each question "simultaneously", the user by tapping, simulated
+//    players by an accuracy roll. Kept for tests, previews, and debug runs.
+//  - party: a real Multipeer game. The engine becomes a mirror of the
+//    host's synced PartyState — local taps route through PartySession
+//    (intents on clients, authority on the host) and every broadcast
+//    snapshot is applied back here for the screens to render.
 //
 
 import Foundation
@@ -25,6 +30,10 @@ final class GameEngine {
         case awaitingAnswer, revealing
     }
 
+    enum PlayContext: Equatable {
+        case practice, partyHost, partyClient
+    }
+
     private(set) var phase: Phase = .ride
     private(set) var players: [Player] = []
     private(set) var questions: [TriviaQuestion] = []
@@ -32,6 +41,9 @@ final class GameEngine {
     private(set) var turnState: TurnState = .awaitingAnswer
     private(set) var userPickedOptionID: String?
     private(set) var winner: Player?
+    private(set) var playContext: PlayContext = .practice
+    /// Genre chip on the riddle card; party games sync the real one.
+    private(set) var activeGenreName = "Riddle Realm"
 
     /// Increment-to-fire animation triggers observed by the screens.
     private(set) var confettiTrigger = 0
@@ -48,10 +60,24 @@ final class GameEngine {
     private let context: ModelContext
     private var advanceTask: Task<Void, Never>?
 
+    /// Wired by the app when a real party forms.
+    @ObservationIgnored weak var party: PartySession?
+    @ObservationIgnored private var localPlayerID: UUID?
+
+    // Diffing anchors for firing one-shot animations off synced snapshots.
+    @ObservationIgnored private var lastSyncedRevealing = false
+    @ObservationIgnored private var lastSyncedQuestionIndex = -1
+    @ObservationIgnored private var lastSyncedPhase: PartyPhase = .lobby
+    @ObservationIgnored private var lastSyncedEpoch = 0
+
     init(context: ModelContext) {
         self.context = context
         seatInitialParty()
     }
+
+    /// True when this device is allowed to drive flow transitions (start,
+    /// back-to-ride). Clients wait on the host.
+    var canControlFlow: Bool { playContext != .partyClient }
 
     // MARK: - Party (Our Ride)
 
@@ -82,9 +108,10 @@ final class GameEngine {
         players = initial
     }
 
-    /// Fills the open seat with the 4th simulated player.
+    /// Fills the open seat with the 4th simulated player (practice only —
+    /// real parties fill seats via synced claims).
     func joinOpenSeat() {
-        guard let seat = openSeatIndex else { return }
+        guard playContext == .practice, let seat = openSeatIndex else { return }
         let joiner = Player(name: "Ziggy", colorIndex: 3, seatIndex: seat, accuracy: 0.5)
         context.insert(joiner)
         players.append(joiner)
@@ -92,9 +119,21 @@ final class GameEngine {
         joinTrigger += 1
     }
 
+    /// The local player taps a seat in Our Ride (party mode: claims or
+    /// moves; the host arbitrates conflicts).
+    func requestSeat(_ seatIndex: Int) {
+        guard playContext != .practice else { return }
+        party?.claimSeat(seatIndex)
+    }
+
     // MARK: - Round lifecycle
 
     func startGame(seed: UInt64? = nil) {
+        if playContext == .partyHost {
+            party?.startTrip()
+            return
+        }
+        guard playContext == .practice else { return }
         advanceTask?.cancel()
         for player in players {
             player.score = 0
@@ -113,6 +152,11 @@ final class GameEngine {
     }
 
     func backToRide() {
+        if playContext == .partyHost {
+            party?.returnToRide()
+            return
+        }
+        guard playContext == .practice else { return }
         advanceTask?.cancel()
         phase = .ride
     }
@@ -121,18 +165,24 @@ final class GameEngine {
     func submitUserAnswer(optionID: String) {
         guard phase == .playing,
               turnState == .awaitingAnswer,
+              userPickedOptionID == nil,
               let user = userPlayer, !user.isOut,
               let question = currentQuestion,
               question.options.contains(where: { $0.id == optionID })
         else { return }
         userPickedOptionID = optionID
-        resolveQuestion(userAnswerID: optionID)
+        if playContext == .practice {
+            resolveQuestion(userAnswerID: optionID)
+        } else {
+            // Locked in; the host resolves once the whole car has answered.
+            party?.submitLocalAnswer(optionID: optionID)
+        }
     }
 
     /// When the user is out, questions still resolve so the bots can finish
     /// the round while the user spectates.
     private func beginQuestionIfSpectating() {
-        guard phase == .playing, turnState == .awaitingAnswer else { return }
+        guard playContext == .practice, phase == .playing, turnState == .awaitingAnswer else { return }
         guard userPlayer == nil || userPlayer!.isOut else { return }
         let delay = spectatorAnswerDelay
         advanceTask = Task { [weak self] in
@@ -212,6 +262,150 @@ final class GameEngine {
     /// Exposed so tests can await the scheduled reveal/advance step.
     func waitForPendingAdvance() async {
         await advanceTask?.value
+    }
+
+    // MARK: - Party mirroring
+
+    /// Joins this engine to a live party: local taps route through the
+    /// session, and synced snapshots become the rendered truth.
+    func attachParty(_ party: PartySession, localPlayerID: UUID) {
+        advanceTask?.cancel()
+        self.party = party
+        self.localPlayerID = localPlayerID
+        lastSyncedRevealing = false
+        lastSyncedQuestionIndex = -1
+        lastSyncedPhase = .lobby
+        lastSyncedEpoch = 0
+    }
+
+    /// The party is over — back to a fresh practice roster so the debug
+    /// slice and a future party both start clean.
+    func detachParty() {
+        party = nil
+        localPlayerID = nil
+        playContext = .practice
+        advanceTask?.cancel()
+        removeAllPlayers()
+        seatInitialParty()
+        questions = []
+        questionIndex = 0
+        turnState = .awaitingAnswer
+        userPickedOptionID = nil
+        winner = nil
+        activeGenreName = "Riddle Realm"
+        phase = .ride
+    }
+
+    /// Applies an authoritative snapshot from the host (every device,
+    /// including the host itself, renders through this same path).
+    func applyPartyState(_ state: PartyState) {
+        guard let localPlayerID else { return }
+        playContext = state.hostID == localPlayerID ? .partyHost : .partyClient
+
+        syncPlayers(from: state)
+
+        let round = state.round
+        if let round {
+            if questions.map(\.id) != round.questions.map(\.id) {
+                questions = round.questions
+            }
+            questionIndex = round.questionIndex
+            turnState = round.revealing ? .revealing : .awaitingAnswer
+            activeGenreName = round.genreName
+            winner = round.winnerID.flatMap { id in players.first { $0.remoteID == id } }
+        } else {
+            questions = []
+            questionIndex = 0
+            turnState = .awaitingAnswer
+            winner = nil
+        }
+
+        // One-shot animation triggers, diffed off the previous snapshot.
+        let localRow = players.first { $0.remoteID == localPlayerID }
+        if let round, round.revealing, !lastSyncedRevealing {
+            reactionTrigger += 1
+            switch localRow?.lastAnswerCorrect {
+            case true?: confettiTrigger += 1
+            case false?: shakeTrigger += 1
+            case nil: break
+            }
+        }
+        if let round, round.questionIndex != lastSyncedQuestionIndex {
+            userPickedOptionID = nil
+        }
+        if state.epoch != lastSyncedEpoch, round?.revealing != true {
+            // Host migration mid-question: in-flight answers died with the
+            // old host, so unlock the local pick for a re-tap.
+            userPickedOptionID = nil
+        }
+        if state.phase == .victory, lastSyncedPhase != .victory {
+            confettiTrigger += 1
+        }
+        if state.phase == .ride, lastSyncedPhase != .ride {
+            userPickedOptionID = nil
+        }
+
+        lastSyncedRevealing = round?.revealing ?? false
+        lastSyncedQuestionIndex = round?.questionIndex ?? -1
+        lastSyncedPhase = state.phase
+        lastSyncedEpoch = state.epoch
+
+        switch state.phase {
+        case .lobby, .ride: phase = .ride
+        case .playing: phase = .playing
+        case .victory: phase = .victory
+        }
+    }
+
+    private func syncPlayers(from state: PartyState) {
+        var rows = Dictionary(uniqueKeysWithValues: players.compactMap { row in
+            row.remoteID.map { ($0, row) }
+        })
+        // Practice bots (no remoteID) never belong in a synced party.
+        for stale in players where stale.remoteID == nil {
+            context.delete(stale)
+        }
+
+        var synced: [Player] = []
+        for remote in state.players {
+            let row: Player
+            if let existing = rows.removeValue(forKey: remote.id) {
+                row = existing
+            } else {
+                row = Player(name: remote.name,
+                             colorIndex: remote.colorIndex,
+                             seatIndex: remote.seatIndex ?? Player.noSeat,
+                             remoteID: remote.id)
+                context.insert(row)
+                joinTrigger += 1
+            }
+            row.name = remote.name
+            row.colorIndex = remote.colorIndex
+            row.seatIndex = remote.seatIndex ?? Player.noSeat
+            row.isUser = remote.id == localPlayerID
+            row.score = remote.score
+            row.strikes = remote.strikes
+            row.lastAnswerCorrect = remote.lastAnswerCorrect
+            row.role = remote.role
+            row.presence = remote.presence
+            synced.append(row)
+        }
+        for (_, orphan) in rows {
+            context.delete(orphan)
+        }
+        players = synced.sorted {
+            let a = $0.seatIndex == Player.noSeat ? Int.max : $0.seatIndex
+            let b = $1.seatIndex == Player.noSeat ? Int.max : $1.seatIndex
+            if a != b { return a < b }
+            return $0.name < $1.name
+        }
+    }
+
+    private func removeAllPlayers() {
+        for player in players {
+            context.delete(player)
+        }
+        players = []
     }
 
     #if DEBUG
