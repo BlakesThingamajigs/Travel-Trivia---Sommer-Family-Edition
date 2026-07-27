@@ -22,6 +22,14 @@ struct ScoreboardDropdown: View {
     var body: some View {
         VStack(spacing: 10) {
             StickerChip(text: "STANDINGS", fill: TT.grape, textColor: .white, textSize: 12)
+            if engine.isTeamRelayMode {
+                HStack(spacing: 8) {
+                    StickerChip(text: "TEAM 1: \(engine.teamScore(0))", fill: TT.lime,
+                                textColor: .white, textSize: 11)
+                    StickerChip(text: "TEAM 2: \(engine.teamScore(1))", fill: TT.sky,
+                                textColor: .white, textSize: 11)
+                }
+            }
             ForEach(standings, id: \.persistentModelID) { player in
                 ScoreboardRow(player: player)
             }

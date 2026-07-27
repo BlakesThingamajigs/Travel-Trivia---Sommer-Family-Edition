@@ -80,6 +80,10 @@ nonisolated struct PartyConfig: Codable, Equatable, Sendable {
     var genreName: String
     var difficulty: DifficultyTier
     var minPlayers: Int
+    /// Mirrors GameMode.requiresEvenPlayers — Team Relay needs two equal
+    /// squads, so the Lobby gates a short/odd start the same way it gates
+    /// an under-minimum start.
+    var requiresEvenPlayers: Bool = false
 }
 
 nonisolated struct PartyPlayerState: Codable, Equatable, Identifiable, Sendable {
@@ -92,6 +96,11 @@ nonisolated struct PartyPlayerState: Codable, Equatable, Identifiable, Sendable 
     var score: Int = 0
     var strikes: Int = 0
     var lastAnswerCorrect: Bool?
+    /// Team Relay: which squad (0 or 1) this rider is on; nil = unassigned.
+    var teamIndex: Int?
+    /// Double or Nothing: the amount wagered on the bonus question currently
+    /// open, cleared once that question settles.
+    var pendingWager: Int?
 }
 
 nonisolated enum PartyPhase: String, Codable, Sendable {
@@ -108,6 +117,53 @@ nonisolated enum CopilotsCurveball {
     static let previewDuration: Duration = .seconds(6)
 
     static func isCurveballIndex(_ questionIndex: Int) -> Bool {
+        (questionIndex + 1) % cadence == 0
+    }
+}
+
+/// Elimination Bracket rules: sudden death instead of the three-strikes
+/// model everyone else uses. The threshold lives here, keyed off the mode,
+/// so `GameEngine.maxStrikes` (Three Strikes, Copilot's Curveball) stays a
+/// plain constant — both `PartySession` and the rendering layer (`Player`)
+/// read the same mode-aware number.
+nonisolated enum Elimination {
+    static let bracketModeSlug = "elimination-bracket"
+
+    /// How many wrong answers a player can take before they're out.
+    /// Elimination Bracket: one. Team Relay: effectively unlimited — an
+    /// individual relay-turn player's strikes shouldn't end the game while
+    /// their teammates haven't had a turn yet; the round only ends when the
+    /// deck runs out. Everything else: the classic three.
+    static func maxStrikes(modeSlug: String) -> Int {
+        switch modeSlug {
+        case bracketModeSlug: 1
+        case TeamRelay.modeSlug: .max
+        default: GameEngine.maxStrikes
+        }
+    }
+}
+
+/// Team Relay rules, shared by host logic and every screen.
+nonisolated enum TeamRelay {
+    static let modeSlug = "team-relay"
+}
+
+/// Herd Reveal rules: any genre's normally-authored questions, scored by
+/// whichever answer won the car's vote instead of the authored answer.
+nonisolated enum HerdReveal {
+    static let modeSlug = "herd-reveal"
+}
+
+/// Double or Nothing rules, shared by host logic and every screen.
+nonisolated enum DoubleOrNothing {
+    static let modeSlug = "double-or-nothing"
+    /// Every Nth question is a wager question.
+    static let cadence = 4
+    /// How long players get to lock in a wager before the bonus question
+    /// opens for answers.
+    static let wagerWindow: Duration = .seconds(8)
+
+    static func isWagerIndex(_ questionIndex: Int) -> Bool {
         (questionIndex + 1) % cadence == 0
     }
 }
@@ -130,6 +186,13 @@ nonisolated struct RoundState: Codable, Equatable, Sendable {
     var genreSlug: String
     var genreName: String
     var winnerID: UUID?
+    /// Team Relay: whose turn it is to answer for each squad — index 0/1,
+    /// rotating to the next connected teammate every question.
+    var teamTurnPlayerID: [UUID?] = [nil, nil]
+    /// Double or Nothing: the current (wager) question is inside its
+    /// lock-in window — wagers are being collected and no answers are
+    /// accepted yet.
+    var wagerOpen: Bool = false
 }
 
 nonisolated struct PartyState: Codable, Equatable, Sendable {
@@ -158,6 +221,7 @@ nonisolated struct PartyState: Codable, Equatable, Sendable {
     var meetsPlayerRequirement: Bool {
         let count = connectedCount
         guard count >= config.minPlayers else { return false }
+        if config.requiresEvenPlayers, count % 2 != 0 { return false }
         return true
     }
 }
@@ -170,6 +234,9 @@ nonisolated enum ClientIntent: Codable, Sendable {
     case hello(playerID: UUID, name: String)
     case requestSeat(playerID: UUID, seatIndex: Int)
     case submitAnswer(playerID: UUID, optionID: String)
+    /// Double or Nothing: lock in a wager for the bonus question currently
+    /// open. Clamped host-side to [0, current score].
+    case submitWager(playerID: UUID, amount: Int)
     /// Deliberate exit — host skips the grace window entirely.
     case goodbye(playerID: UUID)
 }

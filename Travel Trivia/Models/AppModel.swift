@@ -134,7 +134,8 @@ final class AppModel {
                 ?? ContentCatalog.bundledGenres.first { $0.slug == "riddle-realm" }!
             let config = PartyConfig(modeSlug: mode.slug, modeName: mode.displayName,
                                      genreSlug: genre.slug, genreName: genre.displayName,
-                                     difficulty: .familyMix, minPlayers: 2)
+                                     difficulty: .familyMix, minPlayers: 2,
+                                     requiresEvenPlayers: mode.requiresEvenPlayers)
             hostParty(partyName: arguments[i + 1], code: arguments[i + 2], config: config)
         }
         if let i = arguments.firstIndex(of: "-TTJoinParty"), arguments.count > i + 2 {
@@ -203,7 +204,7 @@ final class AppModel {
             if engine.turnState == .awaitingAnswer, engine.userPickedOptionID == nil,
                let question = engine.currentQuestion,
                let me = state.player(myID), me.presence == .connected,
-               me.strikes < GameEngine.maxStrikes {
+               me.strikes < Elimination.maxStrikes(modeSlug: state.config.modeSlug) {
                 // Prediction questions have no authored answer: each player
                 // votes one of the first two options, keyed off its stable
                 // playerID, so a 3+ player run produces a real plurality.
