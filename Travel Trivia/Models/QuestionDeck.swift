@@ -2,21 +2,25 @@
 //  QuestionDeck.swift
 //  Travel Trivia
 //
-//  Deals the deck for a party game: filters the seed pack by difficulty
-//  tier and shuffles each question's display options. Riddle Realm is the
-//  only genre with content today, so every genre slug deals from the same
-//  pack — the routing is real, the content catalog just hasn't caught up.
+//  Deals the deck for a party game: picks the genre's pack (live Supabase
+//  content when the catalog has it, bundled seeds otherwise), filters by
+//  difficulty tier, and shuffles each question's display options.
 //
 
 import Foundation
 
 enum QuestionDeck {
     static func deal(genreSlug: String, tier: DifficultyTier,
+                     livePack: [TriviaQuestion]? = nil,
                      seed: UInt64? = nil) -> [TriviaQuestion] {
         var generator: any RandomNumberGenerator = seed.map { SeededGenerator(seed: $0) }
             ?? SystemRandomNumberGenerator()
+        let pack = livePack ?? SeedQuestions.packs[genreSlug] ?? SeedQuestions.riddleRealm
         let allowed = tier.allowedDifficulties
-        let pack = SeedQuestions.riddleRealm.filter { allowed.contains($0.difficulty) }
-        return pack.map { $0.shufflingOptions(using: &generator) }
+        let filtered = pack.filter { allowed.contains($0.difficulty) }
+        // A pack with nothing in the tier still has to deal a playable game.
+        let dealt = filtered.isEmpty ? pack : filtered
+        return dealt.shuffled(using: &generator)
+            .map { $0.shufflingOptions(using: &generator) }
     }
 }

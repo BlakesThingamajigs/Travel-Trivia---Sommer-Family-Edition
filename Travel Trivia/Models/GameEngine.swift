@@ -40,10 +40,20 @@ final class GameEngine {
     private(set) var questionIndex = 0
     private(set) var turnState: TurnState = .awaitingAnswer
     private(set) var userPickedOptionID: String?
+    /// The option treated as correct for the question being revealed: the
+    /// authored answer, or the party's majority pick for prediction
+    /// questions. Nil outside the reveal.
+    private(set) var revealedCorrectOptionID: String?
     private(set) var winner: Player?
     private(set) var playContext: PlayContext = .practice
     /// Genre chip on the riddle card; party games sync the real one.
     private(set) var activeGenreName = "Riddle Realm"
+    /// The mode this party is playing (nil in practice, which is always
+    /// plain Three Strikes).
+    private(set) var activeModeSlug: String?
+    /// Copilot's Curveball: the current question is in its early-reveal
+    /// window — only the copilot's device may show it.
+    private(set) var curveballPreviewActive = false
 
     /// Increment-to-fire animation triggers observed by the screens.
     private(set) var confettiTrigger = 0
@@ -90,6 +100,16 @@ final class GameEngine {
         questions.indices.contains(questionIndex) ? questions[questionIndex] : nil
     }
 
+    // MARK: - Copilot's Curveball
+
+    var isCurveballMode: Bool { activeModeSlug == CopilotsCurveball.modeSlug }
+    /// The current question carries the curveball twist (marked even after
+    /// the preview window ends).
+    var currentQuestionIsCurveball: Bool {
+        isCurveballMode && CopilotsCurveball.isCurveballIndex(questionIndex)
+    }
+    var localPlayerIsCopilot: Bool { userPlayer?.role == .copilot }
+
     var userPlayer: Player? { players.first(where: \.isUser) }
     var alivePlayers: [Player] { players.filter { !$0.isOut } }
     /// Fuel left in the tank: full at question 1, empty when the round ends.
@@ -128,7 +148,7 @@ final class GameEngine {
 
     // MARK: - Round lifecycle
 
-    func startGame(seed: UInt64? = nil) {
+    func startGame(seed: UInt64? = nil, pack: [TriviaQuestion] = SeedQuestions.riddleRealm) {
         if playContext == .partyHost {
             party?.startTrip()
             return
@@ -142,10 +162,11 @@ final class GameEngine {
         }
         var generator: any RandomNumberGenerator = seed.map { SeededGenerator(seed: $0) }
             ?? SystemRandomNumberGenerator()
-        questions = SeedQuestions.riddleRealm.map { $0.shufflingOptions(using: &generator) }
+        questions = pack.map { $0.shufflingOptions(using: &generator) }
         questionIndex = 0
         winner = nil
         userPickedOptionID = nil
+        revealedCorrectOptionID = nil
         turnState = .awaitingAnswer
         phase = .playing
         beginQuestionIfSpectating()
@@ -165,6 +186,7 @@ final class GameEngine {
     func submitUserAnswer(optionID: String) {
         guard phase == .playing,
               turnState == .awaitingAnswer,
+              !curveballPreviewActive,
               userPickedOptionID == nil,
               let user = userPlayer, !user.isOut,
               let question = currentQuestion,
@@ -195,16 +217,34 @@ final class GameEngine {
     private func resolveQuestion(userAnswerID: String?) {
         guard let question = currentQuestion else { return }
 
+        // Majority-scored questions need everyone's actual pick, so bots
+        // vote for a concrete option (botRoll doubles as the pick source);
+        // authored questions keep the plain accuracy roll.
+        var picks: [ObjectIdentifier: String] = [:]
+        if let userAnswerID, let user = userPlayer {
+            picks[ObjectIdentifier(user)] = userAnswerID
+        }
+        if question.isMajorityScored {
+            for bot in alivePlayers where !bot.isUser {
+                let index = min(Int(botRoll() * Double(question.options.count)),
+                                question.options.count - 1)
+                picks[ObjectIdentifier(bot)] = question.options[index].id
+            }
+        }
+        let correctID = question.correctOptionID
+            ?? MajorityVote.winningOptionID(votes: picks.values, options: question.options)
+        revealedCorrectOptionID = correctID
+
         var userWasCorrect: Bool?
         for player in alivePlayers {
             let correct: Bool
-            if player.isUser {
-                guard let userAnswerID else { continue }
-                correct = userAnswerID == question.correctOptionID
-                userWasCorrect = correct
+            if player.isUser || question.isMajorityScored {
+                guard let pick = picks[ObjectIdentifier(player)] else { continue }
+                correct = pick == correctID
             } else {
                 correct = botRoll() < player.accuracy
             }
+            if player.isUser { userWasCorrect = correct }
             player.lastAnswerCorrect = correct
             if correct {
                 player.score += 1
@@ -235,6 +275,7 @@ final class GameEngine {
             player.lastAnswerCorrect = nil
         }
         userPickedOptionID = nil
+        revealedCorrectOptionID = nil
 
         let roundOver = alivePlayers.count <= 1 || questionIndex + 1 >= questions.count
         if roundOver {
@@ -291,8 +332,10 @@ final class GameEngine {
         questionIndex = 0
         turnState = .awaitingAnswer
         userPickedOptionID = nil
+        revealedCorrectOptionID = nil
         winner = nil
         activeGenreName = "Riddle Realm"
+        activeModeSlug = nil
         phase = .ride
     }
 
@@ -304,6 +347,7 @@ final class GameEngine {
 
         syncPlayers(from: state)
 
+        activeModeSlug = state.config.modeSlug
         let round = state.round
         if let round {
             if questions.map(\.id) != round.questions.map(\.id) {
@@ -312,11 +356,15 @@ final class GameEngine {
             questionIndex = round.questionIndex
             turnState = round.revealing ? .revealing : .awaitingAnswer
             activeGenreName = round.genreName
+            revealedCorrectOptionID = round.resolvedCorrectOptionID
+            curveballPreviewActive = round.curveballPreview
             winner = round.winnerID.flatMap { id in players.first { $0.remoteID == id } }
         } else {
             questions = []
             questionIndex = 0
             turnState = .awaitingAnswer
+            revealedCorrectOptionID = nil
+            curveballPreviewActive = false
             winner = nil
         }
 

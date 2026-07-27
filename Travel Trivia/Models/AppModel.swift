@@ -65,7 +65,8 @@ final class AppModel {
             } else {
                 genre = (config.genreSlug, config.genreName)
             }
-            let deck = QuestionDeck.deal(genreSlug: genre.slug, tier: config.difficulty)
+            let deck = QuestionDeck.deal(genreSlug: genre.slug, tier: config.difficulty,
+                                         livePack: self?.catalog.questionPack(genreSlug: genre.slug))
             return (deck, genre.slug, genre.name)
         }
     }
@@ -121,8 +122,18 @@ final class AppModel {
         }
         if let i = arguments.firstIndex(of: "-TTHostParty"), arguments.count > i + 2 {
             profile.displayName = arguments.count > i + 3 ? arguments[i + 3] : "Pilot"
-            let config = PartyConfig(modeSlug: "three-strikes", modeName: "Three Strikes",
-                                     genreSlug: "riddle-realm", genreName: "Riddle Realm",
+            // -TTMode <slug> / -TTGenre <slug> pick the game; defaults match
+            // the session-2 harness.
+            func value(after flag: String) -> String? {
+                guard let f = arguments.firstIndex(of: flag), arguments.count > f + 1 else { return nil }
+                return arguments[f + 1]
+            }
+            let mode = catalog.mode(slug: value(after: "-TTMode") ?? "three-strikes")
+                ?? ContentCatalog.bundledModes.last!
+            let genre = catalog.genre(slug: value(after: "-TTGenre") ?? "riddle-realm")
+                ?? ContentCatalog.bundledGenres.first { $0.slug == "riddle-realm" }!
+            let config = PartyConfig(modeSlug: mode.slug, modeName: mode.displayName,
+                                     genreSlug: genre.slug, genreName: genre.displayName,
                                      difficulty: .familyMix, minPlayers: 2)
             hostParty(partyName: arguments[i + 1], code: arguments[i + 2], config: config)
         }
@@ -193,7 +204,12 @@ final class AppModel {
                let question = engine.currentQuestion,
                let me = state.player(myID), me.presence == .connected,
                me.strikes < GameEngine.maxStrikes {
-                engine.submitUserAnswer(optionID: question.correctOptionID)
+                // Prediction questions have no authored answer: each player
+                // votes one of the first two options, keyed off its stable
+                // playerID, so a 3+ player run produces a real plurality.
+                let pick = question.correctOptionID
+                    ?? question.options[myID.uuidString.utf8.reduce(0) { ($0 + Int($1)) % 2 }].id
+                engine.submitUserAnswer(optionID: pick)
             }
         case .victory:
             break

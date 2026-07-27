@@ -30,8 +30,10 @@ nonisolated struct GameMode: Identifiable, Equatable, Codable, Sendable {
         case isTeamBased = "is_team_based"
     }
 
-    /// Only Three Strikes has real gameplay behind it this session.
-    var isPlayable: Bool { slug == "three-strikes" }
+    /// Modes with real gameplay behind them so far.
+    var isPlayable: Bool {
+        slug == "three-strikes" || slug == CopilotsCurveball.modeSlug
+    }
 }
 
 nonisolated struct TriviaGenre: Identifiable, Equatable, Codable, Sendable {
@@ -49,8 +51,10 @@ nonisolated struct TriviaGenre: Identifiable, Equatable, Codable, Sendable {
         case needsMedia = "needs_media"
     }
 
-    /// Only Riddle Realm has seeded questions so far.
-    var hasContent: Bool { slug == "riddle-realm" }
+    /// Genres with a bundled question pack (live content can only add to
+    /// these — a live-only genre with no offline fallback would die in a
+    /// cell dead zone).
+    var hasContent: Bool { SeedQuestions.packs[slug] != nil }
 }
 
 @Observable
@@ -64,6 +68,13 @@ final class ContentCatalog {
     private(set) var genres: [TriviaGenre] = ContentCatalog.bundledGenres
     private(set) var source: Source = .bundled
     private(set) var isRefreshing = false
+    /// Live question packs by genre slug, fetched alongside modes/genres.
+    /// Bundled seeds stand in for any genre missing here.
+    private(set) var liveQuestionPacks: [String: [TriviaQuestion]] = [:]
+
+    func questionPack(genreSlug: String) -> [TriviaQuestion]? {
+        liveQuestionPacks[genreSlug]
+    }
 
     /// Genres eligible when the Shuffle Genres setting randomizes per game.
     var contentReadyGenres: [TriviaGenre] { genres.filter(\.hasContent) }
@@ -82,11 +93,40 @@ final class ContentCatalog {
             let liveGenres: [TriviaGenre] = try await client
                 .from("genres").select().order("display_name").execute().value
             guard !liveModes.isEmpty, !liveGenres.isEmpty else { return }
+            let rows: [QuestionRow] = try await client
+                .from("questions")
+                .select("id,difficulty,prompt,options,correct_option_id,genres(slug)")
+                .execute().value
             modes = liveModes
             genres = liveGenres
+            liveQuestionPacks = Dictionary(grouping: rows, by: \.genre.slug)
+                .mapValues { $0.map(\.asQuestion) }
             source = .live
         } catch {
             // Offline or misconfigured — the bundled catalog stands.
+        }
+    }
+
+    /// A `questions` row joined with its genre's slug.
+    private nonisolated struct QuestionRow: Decodable {
+        struct GenreRef: Decodable { let slug: String }
+
+        let id: UUID
+        let difficulty: Difficulty
+        let prompt: String
+        let options: [AnswerOption]
+        let correctOptionID: String?
+        let genre: GenreRef
+
+        enum CodingKeys: String, CodingKey {
+            case id, difficulty, prompt, options
+            case correctOptionID = "correct_option_id"
+            case genre = "genres"
+        }
+
+        var asQuestion: TriviaQuestion {
+            TriviaQuestion(id: id.uuidString, difficulty: difficulty, prompt: prompt,
+                           options: options, correctOptionID: correctOptionID)
         }
     }
 

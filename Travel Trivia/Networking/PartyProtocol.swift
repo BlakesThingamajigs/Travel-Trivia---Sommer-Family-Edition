@@ -98,11 +98,33 @@ nonisolated enum PartyPhase: String, Codable, Sendable {
     case lobby, ride, playing, victory
 }
 
+/// Copilot's Curveball rules, shared by host logic and every screen.
+nonisolated enum CopilotsCurveball {
+    static let modeSlug = "copilots-curveball"
+    /// Every Nth question is a Curveball Question.
+    static let cadence = 4
+    /// How long the copilot's early peek lasts before the question opens
+    /// to the whole car.
+    static let previewDuration: Duration = .seconds(6)
+
+    static func isCurveballIndex(_ questionIndex: Int) -> Bool {
+        (questionIndex + 1) % cadence == 0
+    }
+}
+
 nonisolated struct RoundState: Codable, Equatable, Sendable {
     /// The dealt deck, shuffled by the host; identical on every device.
     var questions: [TriviaQuestion]
     var questionIndex: Int = 0
     var revealing: Bool = false
+    /// What counts as correct for the question being revealed: the authored
+    /// answer, or the majority pick for prediction questions. Nil outside
+    /// the reveal (and when literally nobody voted).
+    var resolvedCorrectOptionID: String?
+    /// Copilot's Curveball: the current question is inside its early-reveal
+    /// window — only the copilot's device shows it, and no answers are
+    /// accepted yet.
+    var curveballPreview: Bool = false
     /// Genre actually in play this game (differs from config when the
     /// Shuffle Genres setting rerolled it).
     var genreSlug: String

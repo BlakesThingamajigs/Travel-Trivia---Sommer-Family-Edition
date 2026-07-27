@@ -5,6 +5,7 @@
 //  Three Strikes engine + seed content tests.
 //
 
+import Foundation
 import Testing
 import SwiftData
 @testable import Travel_Trivia
@@ -66,7 +67,7 @@ struct GameEngineTests {
         engine.botRoll = { 0.99 }  // all bots miss
         engine.startGame(seed: 7)
         let question = try #require(engine.currentQuestion)
-        engine.submitUserAnswer(optionID: question.correctOptionID)
+        engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
         #expect(engine.userPlayer?.score == 1)
         #expect(engine.userPlayer?.strikes == 0)
         #expect(engine.turnState == .revealing)
@@ -101,7 +102,7 @@ struct GameEngineTests {
         // Bots have 3 strikes each after 3 questions; user stays alive
         for _ in 0..<3 {
             let question = try #require(engine.currentQuestion)
-            engine.submitUserAnswer(optionID: question.correctOptionID)
+            engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
             await engine.waitForPendingAdvance()
         }
 
@@ -119,7 +120,7 @@ struct GameEngineTests {
         var answered = 0
         while engine.phase == .playing, answered < 20 {
             let question = try #require(engine.currentQuestion)
-            engine.submitUserAnswer(optionID: question.correctOptionID)
+            engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
             await engine.waitForPendingAdvance()
             answered += 1
         }
@@ -136,7 +137,7 @@ struct GameEngineTests {
         engine.botRoll = { 0.99 }
         engine.startGame(seed: 7)
         let question = try #require(engine.currentQuestion)
-        engine.submitUserAnswer(optionID: question.correctOptionID)
+        engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
         engine.backToRide()
         #expect(engine.phase == .ride)
         engine.startGame(seed: 9)
@@ -164,5 +165,233 @@ struct SeedContentTests {
             #expect(!question.prompt.isEmpty)
         }
         #expect(Set(questions.map(\.id)).count == 16)
+    }
+
+    @Test func wouldYouRatherPackIsAllMajorityScored() {
+        let questions = SeedQuestions.wouldYouRather
+        #expect(questions.count == 40)
+        #expect(questions.filter { $0.difficulty == .easy }.count == 13)
+        #expect(questions.filter { $0.difficulty == .medium }.count == 19)
+        #expect(questions.filter { $0.difficulty == .hard }.count == 8)
+
+        for question in questions {
+            #expect(question.options.count == 6)
+            #expect(question.correctOptionID == nil)
+            #expect(question.isMajorityScored)
+            #expect(Set(question.options.map(\.id)).count == 6)
+            #expect(!question.prompt.isEmpty)
+        }
+        #expect(Set(questions.map(\.id)).count == 40)
+    }
+
+    @Test func movieQuoteMashupPackHasFixedAnswers() {
+        let questions = SeedQuestions.movieQuoteMashup
+        #expect(questions.count == 40)
+        #expect(questions.filter { $0.difficulty == .easy }.count == 15)
+        #expect(questions.filter { $0.difficulty == .medium }.count == 14)
+        #expect(questions.filter { $0.difficulty == .hard }.count == 11)
+
+        for question in questions {
+            #expect(question.options.count == 6)
+            #expect(!question.isMajorityScored)
+            #expect(question.options.contains { $0.id == question.correctOptionID })
+            #expect(Set(question.options.map(\.id)).count == 6)
+        }
+        #expect(Set(questions.map(\.id)).count == 40)
+    }
+
+    @Test func deckDealsRouteByGenreAndTier() {
+        let littleOnes = QuestionDeck.deal(genreSlug: "would-you-rather", tier: .littleOnes, seed: 3)
+        #expect(littleOnes.count == 13)
+        #expect(littleOnes.allSatisfy { $0.difficulty == .easy && $0.id.hasPrefix("wyr-") })
+
+        let grownUp = QuestionDeck.deal(genreSlug: "movie-quote-mashup", tier: .grownUp, seed: 3)
+        #expect(grownUp.count == 25)
+        #expect(grownUp.allSatisfy { $0.difficulty != .easy && $0.id.hasPrefix("mqm-") })
+
+        // Unknown genres still deal a playable riddle deck.
+        let fallback = QuestionDeck.deal(genreSlug: "superlative-showdown", tier: .familyMix, seed: 3)
+        #expect(fallback.count == 16)
+    }
+}
+
+struct MajorityVoteTests {
+    private let options = [
+        AnswerOption(id: "a", text: "A"), AnswerOption(id: "b", text: "B"),
+        AnswerOption(id: "c", text: "C"), AnswerOption(id: "d", text: "D"),
+    ]
+
+    @Test func pluralityWins() {
+        let winner = MajorityVote.winningOptionID(votes: ["c", "b", "c"], options: options)
+        #expect(winner == "c")
+    }
+
+    @Test func tiesBreakTowardEarlierDisplayOrder() {
+        let winner = MajorityVote.winningOptionID(votes: ["d", "b", "d", "b"], options: options)
+        #expect(winner == "b")
+    }
+
+    @Test func noVotesMeansNoWinner() {
+        #expect(MajorityVote.winningOptionID(votes: [], options: options) == nil)
+    }
+}
+
+@MainActor
+struct MajorityScoringEngineTests {
+
+    /// Practice-mode Would You Rather: with botRoll pinned to 0 both bots
+    /// vote for the first displayed option, so the user's different pick
+    /// loses the vote 2-1 and earns a strike.
+    @Test func userLosesMajorityVoteAgainstAlignedBots() async throws {
+        let harness = try EngineHarness()
+        let engine = harness.engine
+        engine.botRoll = { 0.0 }
+        engine.startGame(seed: 7, pack: SeedQuestions.wouldYouRather)
+
+        let question = try #require(engine.currentQuestion)
+        let botsPick = question.options[0].id
+        let userPick = question.options[1].id
+        engine.submitUserAnswer(optionID: userPick)
+
+        #expect(engine.revealedCorrectOptionID == botsPick)
+        #expect(engine.userPlayer?.strikes == 1)
+        #expect(engine.userPlayer?.lastAnswerCorrect == false)
+        let bots = engine.players.filter { !$0.isUser }
+        #expect(bots.allSatisfy { $0.score == 1 && $0.strikes == 0 })
+    }
+
+    @Test func userWinsMajorityVoteByJoiningTheBots() async throws {
+        let harness = try EngineHarness()
+        let engine = harness.engine
+        engine.botRoll = { 0.0 }
+        engine.startGame(seed: 7, pack: SeedQuestions.wouldYouRather)
+
+        let question = try #require(engine.currentQuestion)
+        engine.submitUserAnswer(optionID: question.options[0].id)
+
+        #expect(engine.revealedCorrectOptionID == question.options[0].id)
+        #expect(engine.userPlayer?.score == 1)
+        #expect(engine.userPlayer?.lastAnswerCorrect == true)
+        await engine.waitForPendingAdvance()
+        #expect(engine.revealedCorrectOptionID == nil)
+    }
+}
+
+/// Host-authority round logic driven headlessly: a real PartySession with
+/// networking suppressed, fed the same intents live clients would send.
+@MainActor
+struct PartySessionHostTests {
+    let session = PartySession()
+    let hostID = UUID()
+    let riderID = UUID()
+    let backseatID = UUID()
+
+    private func startParty(modeSlug: String, deck: [TriviaQuestion],
+                            genreSlug: String) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.curveballPreviewDuration = .zero
+        session.dealDeck = { _ in (deck, genreSlug, genreSlug) }
+
+        let config = PartyConfig(modeSlug: modeSlug, modeName: modeSlug,
+                                 genreSlug: genreSlug, genreName: genreSlug,
+                                 difficulty: .familyMix, minPlayers: 2)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.startRide()
+        session.startTrip()
+    }
+
+    private func answer(_ playerID: UUID, _ optionID: String) {
+        if playerID == hostID {
+            session.submitLocalAnswer(optionID: optionID)
+        } else {
+            session.debugApplyIntent(.submitAnswer(playerID: playerID, optionID: optionID))
+        }
+    }
+
+    @Test func majorityVoteScoresThePluralityAcrossThreePlayers() async throws {
+        startParty(modeSlug: "three-strikes", deck: SeedQuestions.wouldYouRather,
+                   genreSlug: "would-you-rather")
+        let question = try #require(session.state?.round?.questions.first)
+
+        // 2-1 split: the car's majority becomes the correct answer.
+        answer(hostID, question.options[2].id)
+        answer(riderID, question.options[2].id)
+        answer(backseatID, question.options[4].id)
+
+        let state = try #require(session.state)
+        #expect(state.round?.revealing == true)
+        #expect(state.round?.resolvedCorrectOptionID == question.options[2].id)
+        #expect(state.player(hostID)?.score == 1)
+        #expect(state.player(riderID)?.score == 1)
+        #expect(state.player(backseatID)?.strikes == 1)
+        #expect(state.player(backseatID)?.lastAnswerCorrect == false)
+
+        await session.debugWaitForAdvance()
+        #expect(session.state?.round?.questionIndex == 1)
+        #expect(session.state?.round?.resolvedCorrectOptionID == nil)
+    }
+
+    @Test func curveballPreviewGatesTheFourthQuestion() async throws {
+        startParty(modeSlug: CopilotsCurveball.modeSlug,
+                   deck: SeedQuestions.movieQuoteMashup,
+                   genreSlug: "movie-quote-mashup")
+        session.assignRole(.copilot, to: riderID)
+        let deck = try #require(session.state?.round?.questions)
+
+        // Answer the first three questions correctly; no preview on any.
+        for index in 0..<3 {
+            #expect(session.state?.round?.curveballPreview == false)
+            let correct = try #require(deck[index].correctOptionID)
+            answer(hostID, correct)
+            answer(riderID, correct)
+            answer(backseatID, correct)
+            await session.debugWaitForAdvance()
+        }
+
+        // Question 4 opens inside the copilot's early-reveal window: answers
+        // are rejected until the window closes.
+        #expect(session.state?.round?.questionIndex == 3)
+        #expect(session.state?.round?.curveballPreview == true)
+        let correct = try #require(deck[3].correctOptionID)
+        answer(riderID, correct)
+        #expect(session.state?.round?.revealing == false)
+
+        await session.debugWaitForCurveballWindow()
+        #expect(session.state?.round?.curveballPreview == false)
+
+        // The early submit was dropped, so all three answer now.
+        answer(hostID, correct)
+        answer(riderID, correct)
+        answer(backseatID, correct)
+        #expect(session.state?.round?.revealing == true)
+        #expect(session.state?.player(riderID)?.score == 4)
+
+        await session.debugWaitForAdvance()
+        #expect(session.state?.round?.questionIndex == 4)
+        #expect(session.state?.round?.curveballPreview == false)
+    }
+
+    @Test func curveballPreviewSkippedWithoutACopilot() async throws {
+        startParty(modeSlug: CopilotsCurveball.modeSlug,
+                   deck: SeedQuestions.movieQuoteMashup,
+                   genreSlug: "movie-quote-mashup")
+        let deck = try #require(session.state?.round?.questions)
+
+        for index in 0..<3 {
+            let correct = try #require(deck[index].correctOptionID)
+            answer(hostID, correct)
+            answer(riderID, correct)
+            answer(backseatID, correct)
+            await session.debugWaitForAdvance()
+        }
+
+        // No copilot in the car — the twist can't happen, play stays normal.
+        #expect(session.state?.round?.questionIndex == 3)
+        #expect(session.state?.round?.curveballPreview == false)
     }
 }

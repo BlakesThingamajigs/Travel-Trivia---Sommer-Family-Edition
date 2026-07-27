@@ -70,6 +70,7 @@ final class PartySession: NSObject {
     // Injectable timings (collapsed in tests).
     var revealDuration: Duration = .seconds(1.9)
     var nobodyConnectedDelay: Duration = .seconds(1.1)
+    var curveballPreviewDuration: Duration = CopilotsCurveball.previewDuration
     var disconnectGrace: Duration = PartyWire.disconnectGrace
     var joinTimeout: Duration = .seconds(12)
     /// Heartbeat cadence and how long silence counts as a dropout.
@@ -98,6 +99,7 @@ final class PartySession: NSObject {
     @ObservationIgnored private var pendingAnswers: [UUID: String] = [:]
     @ObservationIgnored private var graceTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var advanceTask: Task<Void, Never>?
+    @ObservationIgnored private var curveballTask: Task<Void, Never>?
     @ObservationIgnored private var joinTimeoutTask: Task<Void, Never>?
     @ObservationIgnored private var rejoinTask: Task<Void, Never>?
 
@@ -122,6 +124,9 @@ final class PartySession: NSObject {
         makeSession(displayName: playerName, playerID: playerID)
         status = .hosting
         commit(initial)
+        #if DEBUG
+        guard !suppressesNetworking else { return }
+        #endif
         startAdvertising()
         startHeartbeat()
     }
@@ -253,6 +258,7 @@ final class PartySession: NSObject {
     func startTrip() {
         guard isHost, var s = state, let dealDeck else { return }
         advanceTask?.cancel()
+        curveballTask?.cancel()
         pendingAnswers = [:]
 
         var takenSeats = Set(s.players.compactMap(\.seatIndex))
@@ -281,6 +287,7 @@ final class PartySession: NSObject {
     func returnToRide() {
         guard isHost else { return }
         advanceTask?.cancel()
+        curveballTask?.cancel()
         pendingAnswers = [:]
         mutateState { s in
             s.round = nil
@@ -413,14 +420,16 @@ final class PartySession: NSObject {
 
     /// Players the current question waits on: connected and still in it.
     private var answerGate: [UUID] {
-        guard let s = state, s.phase == .playing, let round = s.round, !round.revealing else { return [] }
+        guard let s = state, s.phase == .playing, let round = s.round,
+              !round.revealing, !round.curveballPreview else { return [] }
         return s.players
             .filter { $0.presence == .connected && $0.strikes < GameEngine.maxStrikes }
             .map(\.id)
     }
 
     private func recordAnswer(playerID: UUID, optionID: String) {
-        guard let s = state, s.phase == .playing, let round = s.round, !round.revealing,
+        guard let s = state, s.phase == .playing, let round = s.round,
+              !round.revealing, !round.curveballPreview,
               round.questions.indices.contains(round.questionIndex),
               pendingAnswers[playerID] == nil,
               answerGate.contains(playerID),
@@ -441,9 +450,15 @@ final class PartySession: NSObject {
               round.questions.indices.contains(round.questionIndex) else { return }
         let question = round.questions[round.questionIndex]
 
+        // Authored questions grade against their fixed answer; prediction
+        // questions (Would You Rather — and Herd Reveal later) grade against
+        // whichever option won the car's vote.
+        let correctID = question.correctOptionID
+            ?? MajorityVote.winningOptionID(votes: pendingAnswers.values, options: question.options)
+
         for i in s.players.indices {
             guard let answer = pendingAnswers[s.players[i].id] else { continue }
-            let correct = answer == question.correctOptionID
+            let correct = answer == correctID
             s.players[i].lastAnswerCorrect = correct
             if correct {
                 s.players[i].score += 1
@@ -453,6 +468,7 @@ final class PartySession: NSObject {
         }
         pendingAnswers = [:]
         s.round?.revealing = true
+        s.round?.resolvedCorrectOptionID = correctID
         commit(s)
         scheduleAdvance(after: revealDuration)
     }
@@ -472,6 +488,7 @@ final class PartySession: NSObject {
             s.players[i].lastAnswerCorrect = nil
         }
         s.round?.revealing = false
+        s.round?.resolvedCorrectOptionID = nil
 
         let alive = s.players.filter { $0.strikes < GameEngine.maxStrikes && $0.presence != .left }
         let deckExhausted = round.questionIndex + 1 >= round.questions.count
@@ -479,8 +496,43 @@ final class PartySession: NSObject {
             finishRound(&s)
         } else {
             s.round?.questionIndex = round.questionIndex + 1
+            beginCurveballPreviewIfDue(&s)
         }
         commit(s)
+        holdIfNobodyCanAnswer()
+    }
+
+    // MARK: - Copilot's Curveball
+
+    /// In Copilot's Curveball, every Nth question opens with a short window
+    /// where only the copilot's phone shows it — a real-world head start to
+    /// verbally help (or mislead) the car before anyone can answer. Needs a
+    /// connected copilot to mean anything; otherwise the question plays
+    /// normally.
+    private func beginCurveballPreviewIfDue(_ s: inout PartyState) {
+        guard s.config.modeSlug == CopilotsCurveball.modeSlug,
+              let index = s.round?.questionIndex,
+              CopilotsCurveball.isCurveballIndex(index),
+              s.players.contains(where: { $0.role == .copilot && $0.presence == .connected })
+        else { return }
+        s.round?.curveballPreview = true
+        scheduleCurveballEnd()
+    }
+
+    private func scheduleCurveballEnd() {
+        curveballTask?.cancel()
+        let window = curveballPreviewDuration
+        curveballTask = Task { [weak self] in
+            try? await Task.sleep(for: window)
+            guard let self, !Task.isCancelled else { return }
+            self.endCurveballPreview()
+        }
+    }
+
+    private func endCurveballPreview() {
+        guard state?.round?.curveballPreview == true else { return }
+        mutateState { $0.round?.curveballPreview = false }
+        // The gate just opened; if nobody connected can answer, keep moving.
         holdIfNobodyCanAnswer()
     }
 
@@ -502,7 +554,8 @@ final class PartySession: NSObject {
     /// or everyone connected is out), the question auto-reveals after a beat
     /// so the round never stalls — mirrors the practice spectator flow.
     private func holdIfNobodyCanAnswer() {
-        guard let s = state, s.phase == .playing, s.round?.revealing == false else { return }
+        guard let s = state, s.phase == .playing, let round = s.round,
+              !round.revealing, !round.curveballPreview else { return }
         guard answerGate.isEmpty else { return }
         scheduleAdvance(after: nobodyConnectedDelay)
     }
@@ -607,10 +660,13 @@ final class PartySession: NSObject {
         }
 
         // If a reveal was mid-flight when the host died, resume its clock;
-        // otherwise players re-answer the current question.
+        // a curveball preview restarts its window; otherwise players
+        // re-answer the current question.
         if s.phase == .playing {
             if s.round?.revealing == true {
                 scheduleAdvance(after: revealDuration)
+            } else if s.round?.curveballPreview == true {
+                scheduleCurveballEnd()
             } else {
                 holdIfNobodyCanAnswer()
             }
@@ -816,6 +872,7 @@ final class PartySession: NSObject {
 
     private func teardown(keepingState: Bool) {
         advanceTask?.cancel()
+        curveballTask?.cancel()
         joinTimeoutTask?.cancel()
         rejoinTask?.cancel()
         rejoinTask = nil
@@ -842,6 +899,25 @@ final class PartySession: NSObject {
             status = .idle
         }
     }
+
+    #if DEBUG
+    /// Test seams: drive the host's authority logic headlessly (no Multipeer
+    /// traffic) by injecting the same intents real clients would send, and
+    /// await the host's scheduled round work deterministically.
+    var suppressesNetworking = false
+
+    func debugApplyIntent(_ intent: ClientIntent) {
+        applyIntent(intent)
+    }
+
+    func debugWaitForAdvance() async {
+        await advanceTask?.value
+    }
+
+    func debugWaitForCurveballWindow() async {
+        await curveballTask?.value
+    }
+    #endif
 }
 
 /// Matches TT.avatarColors.count without importing SwiftUI here.
