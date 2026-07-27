@@ -604,7 +604,13 @@ final class PartySession: NSObject {
         let threshold = Elimination.maxStrikes(modeSlug: s.config.modeSlug)
         let alive = s.players.filter { $0.strikes < threshold && $0.presence != .left }
         let deckExhausted = round.questionIndex + 1 >= round.questions.count
-        if alive.count <= 1 || deckExhausted {
+        // Sudden death only applies once the party actually started with
+        // more than one player — a solo-hosted party (no other riders ever
+        // joined) starts at 1 player, which would trivially satisfy
+        // `alive.count <= 1` after the very first question in every mode,
+        // not just Elimination Bracket.
+        let suddenDeath = alive.count <= 1 && s.players.count > 1
+        if suddenDeath || deckExhausted {
             finishRound(&s)
         } else {
             s.round?.questionIndex = round.questionIndex + 1

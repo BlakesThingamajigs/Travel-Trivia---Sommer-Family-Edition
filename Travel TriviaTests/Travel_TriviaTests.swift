@@ -470,6 +470,31 @@ struct PartySessionHostTests {
         #expect(session.state?.round?.resolvedCorrectOptionID == nil)
     }
 
+    /// Regression: a solo-hosted party (nobody else ever joined) starts
+    /// with exactly 1 player, which used to satisfy the sudden-death
+    /// condition trivially after the very first question in every mode,
+    /// not just Elimination Bracket. It should play the whole deck instead.
+    @Test func soloHostedPartyDoesNotEndAfterOneQuestion() async throws {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        let deck = SeedQuestions.wouldYouRather
+        session.dealDeck = { _ in (deck, "would-you-rather", "would-you-rather") }
+        let config = PartyConfig(modeSlug: "three-strikes", modeName: "Three Strikes",
+                                 genreSlug: "would-you-rather", genreName: "would-you-rather",
+                                 difficulty: .familyMix, minPlayers: 1)
+        session.host(partyName: "Solo", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.startRide()
+        session.startTrip()
+
+        session.submitLocalAnswer(optionID: try #require(session.state?.round?.questions.first?.options.first?.id))
+        await session.debugWaitForAdvance()
+
+        #expect(session.state?.phase == .playing)
+        #expect(session.state?.round?.questionIndex == 1)
+    }
+
     @Test func curveballPreviewGatesTheFourthQuestion() async throws {
         startParty(modeSlug: CopilotsCurveball.modeSlug,
                    deck: SeedQuestions.movieQuoteMashup,
@@ -912,7 +937,7 @@ struct ProgressStoreTests {
         let configuration = ModelConfiguration(url: storeURL)
         let playerID = UUID()
 
-        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self,
+        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         let progress1 = ProgressStore(context: container1.mainContext, playerID: playerID)
         #expect(progress1.earnedBadgeIDs.isEmpty)
@@ -920,7 +945,7 @@ struct ProgressStoreTests {
         // Idempotent: earning the same badge again shouldn't re-fire or duplicate.
         #expect(progress1.award(BadgeCatalog.perfectRoundID) == false)
 
-        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self,
+        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
         #expect(progress2.earnedBadgeIDs.contains(BadgeCatalog.perfectRoundID))
@@ -930,7 +955,7 @@ struct ProgressStoreTests {
         let engineHarness = try EngineHarness()
         let engine = engineHarness.engine
         let progressConfig = ModelConfiguration(isStoredInMemoryOnly: true)
-        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self,
+        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                                    configurations: progressConfig)
         let progress = ProgressStore(context: progressContainer.mainContext, playerID: UUID())
         engine.progress = progress

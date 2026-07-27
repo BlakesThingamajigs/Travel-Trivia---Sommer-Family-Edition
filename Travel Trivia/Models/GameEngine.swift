@@ -329,7 +329,12 @@ final class GameEngine {
         userPickedOptionID = nil
         revealedCorrectOptionID = nil
 
-        let roundOver = alivePlayers.count <= 1 || questionIndex + 1 >= questions.count
+        // Sudden death only applies to games that actually started with
+        // more than one player — a solo-hosted practice round starts at 1
+        // player and no bots, which would trivially satisfy this after the
+        // very first question in every mode, not just Elimination Bracket.
+        let suddenDeath = alivePlayers.count <= 1 && players.count > 1
+        let roundOver = suddenDeath || questionIndex + 1 >= questions.count
         if roundOver {
             finishRound()
         } else {
