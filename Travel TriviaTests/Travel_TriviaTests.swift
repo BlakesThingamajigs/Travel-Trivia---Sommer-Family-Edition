@@ -721,3 +721,45 @@ struct DoubleOrNothingTests {
         #expect(state.player(riderID)?.pendingWager == nil)
     }
 }
+
+/// Host-partition demotion: a network-partitioned-but-alive host that spots
+/// a higher-epoch advertisement of its own party (a promoted backup host
+/// out in the mesh) should concede rather than keep advertising a stale
+/// epoch forever. This only exercises the *decision* headlessly — it does
+/// not exercise the real rejoin-over-Multipeer path, which needs an actual
+/// network partition to test for real.
+@MainActor
+struct HostPartitionTests {
+    @Test func stalerHostConcedesToAHigherEpochRivalAd() throws {
+        let session = PartySession()
+        session.suppressesNetworking = true
+        let hostID = UUID()
+        let config = PartyConfig(modeSlug: "three-strikes", modeName: "Three Strikes",
+                                 genreSlug: "riddle-realm", genreName: "Riddle Realm",
+                                 difficulty: .familyMix, minPlayers: 2)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        #expect(session.isHost == true)
+
+        session.debugSimulateRivalHostAd(epoch: 1)   // higher than our epoch 0
+        #expect(session.isHost == false)
+        #expect(session.status == .searching)
+    }
+
+    @Test func sameOrLowerEpochRivalIsIgnored() throws {
+        let session = PartySession()
+        session.suppressesNetworking = true
+        let hostID = UUID()
+        let config = PartyConfig(modeSlug: "three-strikes", modeName: "Three Strikes",
+                                 genreSlug: "riddle-realm", genreName: "Riddle Realm",
+                                 difficulty: .familyMix, minPlayers: 2)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+
+        session.debugSimulateRivalHostAd(epoch: 0)   // same epoch, no promotion happened
+        #expect(session.isHost == true)
+
+        session.debugSimulateRivalHostAd(epoch: 0, name: "Someone Else's Party", code: "9999")
+        #expect(session.isHost == true)
+    }
+}
