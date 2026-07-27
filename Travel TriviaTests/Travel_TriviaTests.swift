@@ -628,3 +628,96 @@ struct HerdRevealTests {
         #expect(state.player(backseatID)?.lastAnswerCorrect == false)
     }
 }
+
+/// Double or Nothing: every 4th question is a wager round — players lock in
+/// a wager against their current score before it opens, correct doubles it
+/// (net +wager), wrong subtracts it, floored at zero.
+@MainActor
+struct DoubleOrNothingTests {
+    let session = PartySession()
+    let hostID = UUID()
+    let riderID = UUID()
+    let backseatID = UUID()
+
+    private func startParty(deck: [TriviaQuestion]) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.wagerDuration = .zero
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let config = PartyConfig(modeSlug: DoubleOrNothing.modeSlug, modeName: "Double or Nothing",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 2)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.startRide()
+        session.startTrip()
+    }
+
+    private func answer(_ playerID: UUID, _ optionID: String) {
+        if playerID == hostID {
+            session.submitLocalAnswer(optionID: optionID)
+        } else {
+            session.debugApplyIntent(.submitAnswer(playerID: playerID, optionID: optionID))
+        }
+    }
+
+    private func wager(_ playerID: UUID, _ amount: Int) {
+        if playerID == hostID {
+            session.submitLocalWager(amount: amount)
+        } else {
+            session.debugApplyIntent(.submitWager(playerID: playerID, amount: amount))
+        }
+    }
+
+    @Test func wagerWinDoublesAndWagerLossFloorsAtZero() async throws {
+        startParty(deck: Array(SeedQuestions.movieQuoteMashup.prefix(4)))
+        let deck = try #require(session.state?.round?.questions)
+
+        // Questions 1-3 answer correctly, normal +1 scoring: everyone banks
+        // a score of 3 heading into the wager round.
+        for index in 0..<3 {
+            let correct = try #require(deck[index].correctOptionID)
+            answer(hostID, correct)
+            answer(riderID, correct)
+            answer(backseatID, correct)
+            await session.debugWaitForAdvance()
+        }
+        #expect(session.state?.player(hostID)?.score == 3)
+        #expect(session.state?.player(riderID)?.score == 3)
+        #expect(session.state?.player(backseatID)?.score == 3)
+
+        // Question 4 (index 3) is the wager round: answers are rejected
+        // until every wager is locked in / the window times out.
+        #expect(session.state?.round?.questionIndex == 3)
+        #expect(session.state?.round?.wagerOpen == true)
+        let q3Correct = try #require(deck[3].correctOptionID)
+        answer(hostID, q3Correct)
+        #expect(session.state?.round?.revealing != true)   // rejected — window's still open
+
+        wager(hostID, 3)      // going all-in
+        wager(riderID, 3)     // also all-in, but about to miss
+        // backseat doesn't wager at all (defaults to 0 — no gain, no loss).
+        await session.debugWaitForWagerWindow()
+        #expect(session.state?.round?.wagerOpen == false)
+
+        let q3Wrong = try #require(deck[3].options.first { $0.id != q3Correct })
+        answer(hostID, q3Correct)    // wins the wager: 3 + 3 = 6
+        answer(riderID, q3Wrong.id)  // loses the wager: 3 - 3 = 0, floored
+        answer(backseatID, q3Correct) // no wager locked in — no change either way
+
+        let state = try #require(session.state)
+        #expect(state.player(hostID)?.score == 6)
+        #expect(state.player(riderID)?.score == 0)
+        #expect(state.player(backseatID)?.score == 3)
+        // Strikes aren't touched by wager settlement — it's not an
+        // elimination risk.
+        #expect(state.player(hostID)?.strikes == 0)
+        #expect(state.player(riderID)?.strikes == 0)
+        // Wager clears once settled.
+        #expect(state.player(hostID)?.pendingWager == nil)
+        #expect(state.player(riderID)?.pendingWager == nil)
+    }
+}
