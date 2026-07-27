@@ -239,6 +239,15 @@ final class AppModel {
                rider.role == .none {
                 party.assignRole(.copilot, to: rider.id)
             }
+            // Team Relay needs every connected rider on a squad before it
+            // can start meaningfully (see PartyState.everyConnectedPlayerHasATeam)
+            // — split them alternately across the two squads by join order.
+            if state.config.modeSlug == TeamRelay.modeSlug {
+                for (index, player) in state.players.filter({ $0.presence == .connected }).enumerated()
+                where player.teamIndex == nil {
+                    party.assignTeam(index % 2, to: player.id)
+                }
+            }
             autoFlowLingerTicks += 1     // linger a beat for screenshots
             if autoFlowLingerTicks >= 3 {
                 autoFlowLingerTicks = 0

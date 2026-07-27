@@ -728,6 +728,37 @@ struct TeamRelayTests {
         // Strikes never eliminate a relay player — everyone's still in it.
         #expect(session.state?.players.allSatisfy { $0.presence == .connected } == true)
     }
+
+    /// Regression: the Lobby let a host start Team Relay with nobody
+    /// assigned to a squad, which silently played through the whole deck
+    /// via `holdIfNobodyCanAnswer`'s "nobody connected" fallback — every
+    /// question skipped, no one ever able to answer. `meetsPlayerRequirement`
+    /// now also requires every connected rider to have a team, with both
+    /// teams non-empty.
+    @Test func meetsPlayerRequirementFailsUntilEveryoneHasATeam() throws {
+        session.suppressesNetworking = true
+        let config = PartyConfig(modeSlug: TeamRelay.modeSlug, modeName: "Team Relay",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 4, requiresEvenPlayers: true)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.debugApplyIntent(.hello(playerID: fourthID, name: "Fourth"))
+
+        #expect(session.state?.meetsPlayerRequirement == false,
+                "4 connected riders but nobody's on a team yet")
+
+        session.assignTeam(0, to: hostID)
+        session.assignTeam(0, to: riderID)
+        #expect(session.state?.meetsPlayerRequirement == false,
+                "everyone assigned so far is on the same single team")
+
+        session.assignTeam(1, to: backseatID)
+        session.assignTeam(1, to: fourthID)
+        #expect(session.state?.meetsPlayerRequirement == true,
+                "all 4 connected riders now split across both teams")
+    }
 }
 
 /// Herd Reveal: any genre's normally-authored questions, scored by whoever

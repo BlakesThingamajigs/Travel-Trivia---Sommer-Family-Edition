@@ -222,7 +222,20 @@ nonisolated struct PartyState: Codable, Equatable, Sendable {
         let count = connectedCount
         guard count >= config.minPlayers else { return false }
         if config.requiresEvenPlayers, count % 2 != 0 { return false }
+        if config.modeSlug == TeamRelay.modeSlug, !everyConnectedPlayerHasATeam { return false }
         return true
+    }
+
+    /// Team Relay only: every connected rider needs a squad, and both
+    /// squads need at least one member, or their relay turn slot sits
+    /// permanently empty -- the round would otherwise silently play
+    /// through every question with nobody able to answer (see
+    /// `holdIfNobodyCanAnswer`, which exists for a fully-disconnected car,
+    /// not an unassigned one).
+    var everyConnectedPlayerHasATeam: Bool {
+        let connected = players.filter { $0.presence == .connected }
+        guard connected.allSatisfy({ $0.teamIndex != nil }) else { return false }
+        return Set(connected.compactMap(\.teamIndex)).count >= 2
     }
 }
 

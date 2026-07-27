@@ -57,7 +57,9 @@ struct LobbyView: View {
             let needed = state?.config.minPlayers ?? 2
             let joined = state?.connectedCount ?? 1
             let modeName = state?.config.modeName ?? "This mode"
-            if state?.config.requiresEvenPlayers == true, joined % 2 != 0 {
+            if isTeamRelay, state?.everyConnectedPlayerHasATeam == false {
+                Text("Assign every rider to a squad first — otherwise a team with nobody on it can never take its turn. Start anyway?")
+            } else if state?.config.requiresEvenPlayers == true, joined % 2 != 0 {
                 Text("\(modeName) needs an even number of riders (at least \(needed)) so both squads match up. \(joined) joined. Start anyway?")
             } else {
                 Text("\(modeName) wants at least \(needed) players and only \(joined) joined. Start anyway?")
