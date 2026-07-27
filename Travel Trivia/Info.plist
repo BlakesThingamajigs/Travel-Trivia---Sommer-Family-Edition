@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Multipeer Connectivity: iOS requires declaring the Bonjour service
+	     and a local-network usage string before peers can see each other. -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_travel-trivia._tcp</string>
+		<string>_travel-trivia._udp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Travel Trivia connects to the other phones in your car to run the party — no internet needed.</string>
+</dict>
+</plist>

@@ -8,18 +8,20 @@
 
 import Foundation
 
-enum Difficulty: String, CaseIterable {
+nonisolated enum Difficulty: String, CaseIterable, Codable, Sendable {
     case easy, medium, hard
 
     var displayName: String { rawValue.uppercased() }
 }
 
-struct AnswerOption: Identifiable, Equatable, Hashable {
+nonisolated struct AnswerOption: Identifiable, Equatable, Hashable, Codable, Sendable {
     let id: String
     let text: String
 }
 
-struct TriviaQuestion: Identifiable {
+// Codable so the host can ship the dealt question deck to every device in
+// one party-state broadcast.
+nonisolated struct TriviaQuestion: Identifiable, Equatable, Codable, Sendable {
     let id: String
     let difficulty: Difficulty
     let prompt: String
