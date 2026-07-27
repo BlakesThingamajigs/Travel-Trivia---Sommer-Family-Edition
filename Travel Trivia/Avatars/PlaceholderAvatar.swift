@@ -18,6 +18,11 @@ struct AvatarHead: View {
     var color: Color
     var expression: AvatarExpression = .idle
     var size: CGFloat = 44
+    /// My Garage cosmetics — all default to "none" so every existing call
+    /// site keeps rendering exactly as before without passing these.
+    var hatID: String = "hat-none"
+    var accessoryID: String = "acc-none"
+    var stickerID: String = "sticker-none"
 
     // Idle life: a slow breathing scale/bob and the occasional blink, kept
     // subtle enough that a whole row of avatars doesn't turn into a wall of
@@ -40,6 +45,9 @@ struct AvatarHead: View {
                 .overlay(Circle().stroke(TT.ink, lineWidth: size * 0.06))
                 .frame(width: size, height: size)
             face
+            cheekSticker
+            accessoryOverlay
+            hatOverlay
         }
         .scaleEffect(breathing ? 1.018 : 1.0)
         .offset(y: breathing ? -size * 0.01 : size * 0.01)
@@ -182,6 +190,195 @@ struct AvatarHead: View {
                 .frame(width: size * 0.26, height: size * 0.08)
         }
     }
+
+    // MARK: My Garage cosmetics (hat / accessory / cheek sticker overlays)
+
+    @ViewBuilder
+    private var hatOverlay: some View {
+        switch hatID {
+        case "hat-cap":
+            Capsule()
+                .fill(TT.skyDeep)
+                .overlay(Capsule().stroke(TT.ink, lineWidth: size * 0.05))
+                .frame(width: size * 0.62, height: size * 0.24)
+                .offset(y: -size * 0.52)
+        case "hat-party":
+            Triangle()
+                .fill(TT.bubblegum)
+                .overlay(Triangle().stroke(TT.ink, lineWidth: size * 0.05))
+                .frame(width: size * 0.4, height: size * 0.44)
+                .overlay(alignment: .top) {
+                    Circle().fill(TT.sunshine).frame(width: size * 0.1, height: size * 0.1)
+                        .offset(y: -size * 0.05)
+                }
+                .offset(y: -size * 0.56)
+        case "hat-crown":
+            CrownShape()
+                .fill(TT.sunshine)
+                .overlay(CrownShape().stroke(TT.ink, lineWidth: size * 0.045))
+                .frame(width: size * 0.6, height: size * 0.26)
+                .offset(y: -size * 0.5)
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var accessoryOverlay: some View {
+        switch accessoryID {
+        case "acc-shades":
+            HStack(spacing: size * 0.05) {
+                RoundedRectangle(cornerRadius: size * 0.03).fill(TT.ink)
+                    .frame(width: size * 0.2, height: size * 0.13)
+                RoundedRectangle(cornerRadius: size * 0.03).fill(TT.ink)
+                    .frame(width: size * 0.2, height: size * 0.13)
+            }
+            .offset(y: -size * 0.09)
+        case "acc-bowtie":
+            BowtieShape()
+                .fill(TT.cherry)
+                .overlay(BowtieShape().stroke(TT.ink, lineWidth: size * 0.04))
+                .frame(width: size * 0.34, height: size * 0.18)
+                .offset(y: size * 0.46)
+        case "acc-flower":
+            ZStack {
+                ForEach(0..<5, id: \.self) { i in
+                    Ellipse()
+                        .fill(TT.bubblegum)
+                        .frame(width: size * 0.14, height: size * 0.08)
+                        .rotationEffect(.degrees(Double(i) * 72))
+                }
+                Circle().fill(TT.sunshine).frame(width: size * 0.1, height: size * 0.1)
+            }
+            .offset(y: -size * 0.5)
+        default:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var cheekSticker: some View {
+        switch stickerID {
+        case "sticker-star":
+            StarShape()
+                .fill(TT.sunshine)
+                .frame(width: size * 0.16, height: size * 0.16)
+                .offset(x: size * 0.28, y: size * 0.08)
+        case "sticker-heart":
+            HeartShape()
+                .fill(TT.cherry)
+                .frame(width: size * 0.16, height: size * 0.15)
+                .offset(x: size * 0.28, y: size * 0.08)
+        case "sticker-lightning":
+            LightningShape()
+                .fill(TT.sunshine)
+                .stroke(TT.ink, lineWidth: size * 0.02)
+                .frame(width: size * 0.14, height: size * 0.2)
+                .offset(x: size * 0.28, y: size * 0.06)
+        default:
+            EmptyView()
+        }
+    }
+}
+
+// MARK: - Small cosmetic glyph shapes
+
+nonisolated private struct Triangle: Shape {
+    nonisolated func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+nonisolated private struct CrownShape: Shape {
+    nonisolated func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let peaks = 3
+        let step = rect.width / CGFloat(peaks)
+        path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        for i in 0..<peaks {
+            let x0 = rect.minX + step * CGFloat(i)
+            let xMid = x0 + step / 2
+            let x1 = x0 + step
+            path.addLine(to: CGPoint(x: xMid, y: rect.minY))
+            path.addLine(to: CGPoint(x: x1, y: rect.maxY))
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+nonisolated private struct BowtieShape: Shape {
+    nonisolated func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        var right = Path()
+        right.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        right.addLine(to: CGPoint(x: rect.midX, y: rect.midY))
+        right.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        right.closeSubpath()
+        path.addPath(right)
+        return path
+    }
+}
+
+nonisolated private struct StarShape: Shape {
+    nonisolated func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let outer = min(rect.width, rect.height) / 2
+        let inner = outer * 0.42
+        var path = Path()
+        for i in 0..<10 {
+            let radius = i % 2 == 0 ? outer : inner
+            let angle = Double(i) * .pi / 5 - .pi / 2
+            let point = CGPoint(x: center.x + CGFloat(cos(angle)) * radius,
+                                y: center.y + CGFloat(sin(angle)) * radius)
+            if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+nonisolated private struct HeartShape: Shape {
+    nonisolated func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width, h = rect.height
+        path.move(to: CGPoint(x: rect.midX, y: h * 0.95))
+        path.addCurve(to: CGPoint(x: rect.minX, y: h * 0.32),
+                      control1: CGPoint(x: rect.midX - w * 0.1, y: h * 0.75),
+                      control2: CGPoint(x: rect.minX, y: h * 0.55))
+        path.addArc(center: CGPoint(x: w * 0.25, y: h * 0.28), radius: w * 0.25,
+                    startAngle: .degrees(150), endAngle: .degrees(-20), clockwise: false)
+        path.addArc(center: CGPoint(x: w * 0.75, y: h * 0.28), radius: w * 0.25,
+                    startAngle: .degrees(200), endAngle: .degrees(30), clockwise: false)
+        path.addCurve(to: CGPoint(x: rect.midX, y: h * 0.95),
+                      control1: CGPoint(x: rect.maxX, y: h * 0.55),
+                      control2: CGPoint(x: rect.midX + w * 0.1, y: h * 0.75))
+        path.closeSubpath()
+        return path
+    }
+}
+
+nonisolated private struct LightningShape: Shape {
+    nonisolated func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.maxX * 0.6, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.midY * 1.1))
+        path.addLine(to: CGPoint(x: rect.midX * 0.9, y: rect.midY * 1.1))
+        path.addLine(to: CGPoint(x: rect.minX * 1.2, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY * 0.75))
+        path.addLine(to: CGPoint(x: rect.midX * 1.1, y: rect.midY * 0.75))
+        path.closeSubpath()
+        return path
+    }
 }
 
 /// Quad-curve mouth (or brow/eye arc): positive curve smiles, negative
@@ -205,10 +402,14 @@ struct AvatarFullBody: View {
     var color: Color
     var expression: AvatarExpression = .idle
     var height: CGFloat = 130
+    var hatID: String = "hat-none"
+    var accessoryID: String = "acc-none"
+    var stickerID: String = "sticker-none"
 
     var body: some View {
         VStack(spacing: -height * 0.05) {
-            AvatarHead(color: color, expression: expression, size: height * 0.42)
+            AvatarHead(color: color, expression: expression, size: height * 0.42,
+                       hatID: hatID, accessoryID: accessoryID, stickerID: stickerID)
                 .zIndex(1)
             // Body: rounded capsule torso, wider than the head so the
             // silhouette reads as shoulders rather than a second, equally

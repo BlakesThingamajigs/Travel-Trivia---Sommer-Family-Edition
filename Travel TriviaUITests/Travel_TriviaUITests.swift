@@ -187,6 +187,33 @@ final class Travel_TriviaUITests: XCTestCase {
                       "Earning a badge should show the celebration overlay")
     }
 
+    /// My Garage: equipping a starter (free/unlocked) cosmetic should
+    /// persist across a relaunch, confirming ProgressStore's SwiftData
+    /// container survives process death like the rest of local state.
+    @MainActor
+    func testGarageCustomizationPersistsAcrossRelaunch() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTResetProgress"]
+        app.launch()
+
+        app.buttons["menu-garage"].tap()
+        let hatCap = app.buttons["cosmetic-hat-cap"]
+        XCTAssertTrue(hatCap.waitForExistence(timeout: 5))
+        XCTAssertEqual(hatCap.value as? String, "unlocked", "Road Cap is a free starter item")
+        hatCap.tap()
+        XCTAssertEqual(hatCap.value as? String, "equipped", "Tapping an unlocked item should equip it")
+
+        app.terminate()
+
+        let app2 = XCUIApplication()
+        app2.launch()
+        app2.buttons["menu-garage"].tap()
+        let hatCapAgain = app2.buttons["cosmetic-hat-cap"]
+        XCTAssertTrue(hatCapAgain.waitForExistence(timeout: 5))
+        XCTAssertEqual(hatCapAgain.value as? String, "equipped",
+                       "Equipped cosmetic should still be equipped after relaunch")
+    }
+
     /// Settings persists the display name and toggles.
     @MainActor
     func testSettingsEditsPersistLocally() throws {

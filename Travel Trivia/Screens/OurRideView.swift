@@ -12,6 +12,7 @@ import SwiftUI
 
 struct OurRideView: View {
     @Environment(GameEngine.self) private var engine
+    @Environment(AppModel.self) private var app
 
     private var unseated: [Player] {
         engine.players.filter { !$0.isSeated && $0.presence != .left }
@@ -36,7 +37,10 @@ struct OurRideView: View {
                     ForEach(unseated, id: \.persistentModelID) { player in
                         VStack(spacing: 2) {
                             AvatarHead(color: TT.avatarColors[player.colorIndex % TT.avatarColors.count],
-                                       expression: .idle, size: 34)
+                                       expression: .idle, size: 34,
+                                       hatID: player.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
+                                       accessoryID: player.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
+                                       stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
                             StickerChip(text: player.isUser ? "YOU" : player.name,
                                         textSize: 9)
                         }
@@ -200,6 +204,7 @@ private struct SeatBase: View {
 }
 
 private struct OccupiedSeat: View {
+    @Environment(AppModel.self) private var app
     var player: Player
 
     private var dropped: Bool { player.presence == .dropped }
@@ -208,7 +213,10 @@ private struct OccupiedSeat: View {
         VStack(spacing: 4) {
             AvatarFullBody(color: TT.avatarColors[player.colorIndex % TT.avatarColors.count],
                            expression: dropped ? .sad : .happy,
-                           height: 78)
+                           height: 78,
+                           hatID: player.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
+                           accessoryID: player.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
+                           stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
             StickerChip(text: player.isUser ? "\(player.name) (You)" : player.name,
                         fill: player.isUser ? TT.sunshine : TT.paper,
                         textSize: 11)

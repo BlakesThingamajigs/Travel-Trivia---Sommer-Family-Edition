@@ -42,13 +42,17 @@ struct ScoreboardDropdown: View {
 }
 
 private struct ScoreboardRow: View {
+    @Environment(AppModel.self) private var app
     var player: Player
 
     var body: some View {
         HStack(spacing: 10) {
             AvatarHead(color: TT.avatarColors[player.colorIndex % TT.avatarColors.count],
                        expression: player.isOut ? .sad : .idle,
-                       size: 34)
+                       size: 34,
+                       hatID: player.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
+                       accessoryID: player.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
+                       stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
             VStack(alignment: .leading, spacing: 2) {
                 Text(player.isUser ? "\(player.name) (You)" : player.name)
                     .font(TT.font(14, .heavy))

@@ -45,6 +45,9 @@ struct RootView: View {
         case .settings:
             SettingsView()
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+        case .garage:
+            GarageView()
+                .transition(.move(edge: .bottom).combined(with: .opacity))
         case .party:
             partyContent
         case .practice:

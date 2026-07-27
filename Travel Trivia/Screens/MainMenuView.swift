@@ -14,6 +14,10 @@ struct MainMenuView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
+                BubbleIconButton(systemName: "car.2.fill", fill: TT.paper) {
+                    app.route = .garage
+                }
+                .accessibilityIdentifier("menu-garage")
                 Spacer()
                 BubbleIconButton(systemName: "gearshape.fill", fill: TT.paper) {
                     app.route = .settings

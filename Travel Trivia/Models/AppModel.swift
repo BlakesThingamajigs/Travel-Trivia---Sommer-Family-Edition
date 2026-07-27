@@ -18,6 +18,8 @@ final class AppModel {
         case createGame
         case joinGame
         case settings
+        /// My Garage: avatar/car customization shop plus the badges tab.
+        case garage
         /// Live party: lobby → ride → playing → victory, driven by the
         /// synced party phase.
         case party

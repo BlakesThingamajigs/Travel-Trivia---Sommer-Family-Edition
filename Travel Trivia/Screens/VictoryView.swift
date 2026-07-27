@@ -12,6 +12,7 @@ import SwiftUI
 
 struct VictoryView: View {
     @Environment(GameEngine.self) private var engine
+    @Environment(AppModel.self) private var app
     @State private var confettiTick = 0
 
     var body: some View {
@@ -23,7 +24,10 @@ struct VictoryView: View {
             if let winner = engine.winner {
                 AvatarFullBody(color: TT.avatarColors[winner.colorIndex % TT.avatarColors.count],
                                expression: .happy,
-                               height: 210)
+                               height: 210,
+                               hatID: winner.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
+                               accessoryID: winner.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
+                               stickerID: winner.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
                     .victoryDance()
 
                 StickerChip(text: winner.isUser ? "\(winner.name) (You)" : winner.name,

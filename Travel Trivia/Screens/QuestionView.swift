@@ -346,6 +346,7 @@ private struct AvatarStrip: View {
 
 private struct PlayerBubble: View {
     @Environment(GameEngine.self) private var engine
+    @Environment(AppModel.self) private var app
     var player: Player
 
     private var expression: AvatarExpression {
@@ -361,7 +362,10 @@ private struct PlayerBubble: View {
         VStack(spacing: 4) {
             AvatarHead(color: TT.avatarColors[player.colorIndex % TT.avatarColors.count],
                        expression: expression,
-                       size: 56)
+                       size: 56,
+                       hatID: player.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
+                       accessoryID: player.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
+                       stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
                 .reactionBounce(trigger: player.lastAnswerCorrect == true ? engine.reactionTrigger : 0)
                 .shake(trigger: player.lastAnswerCorrect == false ? engine.reactionTrigger : 0)
                 .overlay(alignment: .topTrailing) {
