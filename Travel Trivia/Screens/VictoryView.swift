@@ -2,9 +2,10 @@
 //  VictoryView.swift
 //  Travel Trivia
 //
-//  End-of-round celebration: winner's full-body avatar bouncing under
-//  repeating confetti. The full Rive victory dance replaces the bounce
-//  later; the layout already leaves the avatar center stage for it.
+//  End-of-round celebration: winner's full-body avatar doing a looping
+//  victory dance under repeating confetti. A real Rive victory dance
+//  replaces this later; the layout already leaves the avatar center stage
+//  for it.
 //
 
 import SwiftUI
@@ -12,7 +13,6 @@ import SwiftUI
 struct VictoryView: View {
     @Environment(GameEngine.self) private var engine
     @State private var confettiTick = 0
-    @State private var bouncing = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -24,8 +24,7 @@ struct VictoryView: View {
                 AvatarFullBody(color: TT.avatarColors[winner.colorIndex % TT.avatarColors.count],
                                expression: .happy,
                                height: 210)
-                    .offset(y: bouncing ? -22 : 6)
-                    .rotationEffect(.degrees(bouncing ? 3 : -3))
+                    .victoryDance()
 
                 StickerChip(text: winner.isUser ? "\(winner.name) (You)" : winner.name,
                             fill: TT.sunshine, textSize: 18)
@@ -56,9 +55,6 @@ struct VictoryView: View {
             ConfettiBurst(trigger: confettiTick, origin: .init(x: 0.5, y: 0.25), pieceCount: 36)
         }
         .task {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.32).repeatForever(autoreverses: true)) {
-                bouncing = true
-            }
             // Keep the party going: a fresh burst every 1.2 s. The short
             // initial delay lets the confetti canvas mount before the first
             // trigger lands.
