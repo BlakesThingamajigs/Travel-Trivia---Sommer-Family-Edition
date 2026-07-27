@@ -570,3 +570,61 @@ struct TeamRelayTests {
         #expect(session.state?.players.allSatisfy { $0.presence == .connected } == true)
     }
 }
+
+/// Herd Reveal: any genre's normally-authored questions, scored by whoever
+/// matched the car's *majority pick* — not whoever was objectively right.
+@MainActor
+struct HerdRevealTests {
+    let session = PartySession()
+    let hostID = UUID()
+    let riderID = UUID()
+    let backseatID = UUID()
+
+    private func startParty(deck: [TriviaQuestion]) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let config = PartyConfig(modeSlug: HerdReveal.modeSlug, modeName: "Herd Reveal",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 3)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.startRide()
+        session.startTrip()
+    }
+
+    private func answer(_ playerID: UUID, _ optionID: String) {
+        if playerID == hostID {
+            session.submitLocalAnswer(optionID: optionID)
+        } else {
+            session.debugApplyIntent(.submitAnswer(playerID: playerID, optionID: optionID))
+        }
+    }
+
+    @Test func popularWrongAnswerScoresCorrectAndTheObjectivelyRightMinorityLoses() async throws {
+        startParty(deck: SeedQuestions.movieQuoteMashup)
+        let question = try #require(session.state?.round?.questions.first)
+        let objectivelyCorrect = try #require(question.correctOptionID)
+        let popularButWrong = try #require(question.options.first { $0.id != objectivelyCorrect })
+
+        // 2-1 split: the majority is objectively wrong per the question's
+        // authored answer, but Herd Reveal scores the vote, not the truth.
+        answer(hostID, popularButWrong.id)
+        answer(riderID, popularButWrong.id)
+        answer(backseatID, objectivelyCorrect)
+
+        let state = try #require(session.state)
+        #expect(state.round?.resolvedCorrectOptionID == popularButWrong.id)
+        #expect(state.round?.resolvedCorrectOptionID != objectivelyCorrect)
+        #expect(state.player(hostID)?.score == 1)
+        #expect(state.player(hostID)?.lastAnswerCorrect == true)
+        #expect(state.player(riderID)?.score == 1)
+        // Backseat picked the *actually* correct answer and still strikes
+        // out, because it lost the popular vote.
+        #expect(state.player(backseatID)?.strikes == 1)
+        #expect(state.player(backseatID)?.lastAnswerCorrect == false)
+    }
+}
