@@ -174,8 +174,9 @@ private struct RiddleCard: View {
             Text(question.prompt)
                 .font(TT.font(19, .bold))
                 .foregroundStyle(TT.ink)
-                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+                .accessibilityIdentifier("riddle-prompt")
         }
         .padding(14)
         .sticker(RoundedRectangle(cornerRadius: 20), fill: TT.paper)
