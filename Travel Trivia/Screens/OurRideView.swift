@@ -205,15 +205,15 @@ private struct OccupiedSeat: View {
     private var dropped: Bool { player.presence == .dropped }
 
     var body: some View {
-        VStack(spacing: -2) {
+        VStack(spacing: 4) {
             AvatarFullBody(color: TT.avatarColors[player.colorIndex % TT.avatarColors.count],
                            expression: dropped ? .sad : .happy,
-                           height: 84)
+                           height: 78)
             StickerChip(text: player.isUser ? "\(player.name) (You)" : player.name,
                         fill: player.isUser ? TT.sunshine : TT.paper,
                         textSize: 11)
         }
-        .offset(y: 8)
+        .offset(y: 4)
         .opacity(dropped ? 0.45 : 1)
         .saturation(dropped ? 0.25 : 1)
         .overlay(alignment: .top) {
