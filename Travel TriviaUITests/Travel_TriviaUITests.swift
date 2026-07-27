@@ -214,6 +214,38 @@ final class Travel_TriviaUITests: XCTestCase {
                        "Equipped cosmetic should still be equipped after relaunch")
     }
 
+    /// Button-label truncation fix (RoadSignLabel + StickerChip): screenshots
+    /// the difficulty picker (all 3 tiers, including the longest label,
+    /// "Grown-Up Challenge") and the Create Game summary chips that echo the
+    /// selected mode/genre/difficulty names back — the actual truncation
+    /// site, since those chips use the same lineLimit(1)-without-scaling
+    /// pattern RoadSignLabel had.
+    @MainActor
+    func testDifficultyLabelsAndSummaryChipsRenderWithoutTruncation() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        app.buttons["menu-create"].tap()
+        app.buttons["mode-three-strikes"].tap()
+        app.buttons["genre-riddle-realm"].tap()
+
+        let grownUp = app.buttons["difficulty-grown-up-challenge"]
+        XCTAssertTrue(grownUp.waitForExistence(timeout: 5))
+        let difficultyScreenshot = XCTAttachment(screenshot: app.screenshot())
+        difficultyScreenshot.name = "difficulty-picker"
+        difficultyScreenshot.lifetime = .keepAlways
+        add(difficultyScreenshot)
+
+        grownUp.tap()
+
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        let summaryScreenshot = XCTAttachment(screenshot: app.screenshot())
+        summaryScreenshot.name = "create-game-summary-chips"
+        summaryScreenshot.lifetime = .keepAlways
+        add(summaryScreenshot)
+    }
+
     /// Settings persists the display name and toggles.
     @MainActor
     func testSettingsEditsPersistLocally() throws {

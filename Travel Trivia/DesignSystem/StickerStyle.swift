@@ -72,6 +72,7 @@ struct StickerChip: View {
             .font(TT.font(textSize, .heavy))
             .foregroundStyle(textColor)
             .lineLimit(1)
+            .minimumScaleFactor(0.6)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
             .sticker(Capsule(), fill: fill, lineWidth: 2, drop: CGSize(width: 0, height: 3))

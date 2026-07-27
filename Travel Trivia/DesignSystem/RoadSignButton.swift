@@ -19,6 +19,7 @@ struct RoadSignLabel: View {
             .tracking(1.5)
             .foregroundStyle(.white)
             .lineLimit(1)
+            .minimumScaleFactor(0.65)
             .padding(.horizontal, 30)
             .padding(.vertical, 15)
             .background {
