@@ -3,9 +3,9 @@
 //  Travel Trivia
 //
 //  Local settings: display name, the Shuffle Genres game rule, and the
-//  audio output preference — routes real sound-genre clip playback via
-//  AudioDirector (narration is a follow-up). The account section stays a
-//  visual stub — real Google/Apple sign-in is deliberately not wired yet.
+//  audio output preference — routes real narration and sound-genre clip
+//  playback via AudioDirector. The account section stays a visual stub —
+//  real Google/Apple sign-in is deliberately not wired yet.
 //
 
 import SwiftUI
@@ -41,7 +41,7 @@ struct SettingsView: View {
                                 audioOption(output, current: $profile.audioOutput)
                             }
                         }
-                        caption("Sound-genre clips route through this pick live. Narration lands in a future update.")
+                        caption("Question narration and sound-genre clips route through this pick live.")
                     }
 
                     accountSection

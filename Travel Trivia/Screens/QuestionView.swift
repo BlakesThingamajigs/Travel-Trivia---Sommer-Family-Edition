@@ -15,13 +15,15 @@ struct QuestionView: View {
     @Environment(AppModel.self) private var app
     @State private var scoreboardOpen = false
 
-    /// Auto-plays a sound genre's clip as soon as its question is actually
-    /// visible (matches the "no manual trigger" auto-play design already
-    /// used for narration elsewhere in the vault docs — narration itself
-    /// isn't built yet, so every phone plays its own copy of the clip for
-    /// now).
+    /// One phone per party narrates out loud — the copilot's, per the
+    /// party/multiplayer design (driver stays hands-free); practice mode
+    /// has no assigned roles, so it always narrates for itself.
+    private var narratesLocally: Bool {
+        engine.playContext == .practice || engine.localPlayerIsCopilot
+    }
+
     private func presentQuestionIfNeeded() {
-        guard !questionHiddenByCurveball, !wagerChoicePending,
+        guard narratesLocally, !questionHiddenByCurveball, !wagerChoicePending,
               engine.turnState == .awaitingAnswer,
               let question = engine.currentQuestion else { return }
         app.audio.presentQuestion(question, genreSlug: engine.activeGenreSlug)
