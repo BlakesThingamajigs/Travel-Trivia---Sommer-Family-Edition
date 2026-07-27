@@ -70,18 +70,18 @@ final class Travel_TriviaUITests: XCTestCase {
         XCTAssertTrue(create.waitForExistence(timeout: 5), "Main menu should show Create a New Game")
         create.tap()
 
-        // Only Three Strikes is playable; the rest are Coming Soon.
+        // All 6 bundled modes are playable as of the audio/badges/auth
+        // session, so there's no more "Coming Soon" mode to assert disabled
+        // against here — this just confirms Three Strikes is selectable.
         let threeStrikes = app.buttons["mode-three-strikes"]
         XCTAssertTrue(threeStrikes.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["mode-team-relay"].isEnabled, "Unbuilt modes should be disabled")
         threeStrikes.tap()
 
+        // Every bundled genre now ships real content (the 3 audio genres
+        // included, since the narration/audio session), so there's no more
+        // empty/disabled genre to assert against either.
         let riddleRealm = app.buttons["genre-riddle-realm"]
         XCTAssertTrue(riddleRealm.waitForExistence(timeout: 5))
-        // Time Machine now ships bundled content (genre-batch-2); Animal
-        // Sounds Safari still needs media assets, so it stays the reliably
-        // empty/disabled genre for this check.
-        XCTAssertFalse(app.buttons["genre-animal-sounds-safari"].isEnabled, "Empty genres should be disabled")
         riddleRealm.tap()
 
         app.buttons["difficulty-family-mix"].tap()
