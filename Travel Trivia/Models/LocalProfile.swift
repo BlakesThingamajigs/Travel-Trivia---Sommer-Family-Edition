@@ -50,6 +50,13 @@ final class LocalProfile {
         defaults.string(forKey: Keys.displayName) != nil
     }
 
+    /// True once the first-launch sign-in prompt has been shown and either
+    /// skipped or acted on — permanent, like every other local-only setting
+    /// here, so it never shows again on a later launch.
+    var hasSeenWelcomeSignInPrompt: Bool {
+        didSet { defaults.set(hasSeenWelcomeSignInPrompt, forKey: Keys.hasSeenWelcomeSignInPrompt) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         if let stored = defaults.string(forKey: Keys.playerID), let id = UUID(uuidString: stored) {
@@ -62,6 +69,7 @@ final class LocalProfile {
         shuffleGenres = defaults.bool(forKey: Keys.shuffleGenres)
         audioOutput = defaults.string(forKey: Keys.audioOutput)
             .flatMap(AudioOutput.init(rawValue:)) ?? .bluetooth
+        hasSeenWelcomeSignInPrompt = defaults.bool(forKey: Keys.hasSeenWelcomeSignInPrompt)
     }
 
     private enum Keys {
@@ -69,5 +77,6 @@ final class LocalProfile {
         static let displayName = "tt.local.displayName"
         static let shuffleGenres = "tt.settings.shuffleGenres"
         static let audioOutput = "tt.settings.audioOutput"
+        static let hasSeenWelcomeSignInPrompt = "tt.local.hasSeenWelcomeSignInPrompt"
     }
 }

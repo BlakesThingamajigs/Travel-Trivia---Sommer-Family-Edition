@@ -14,6 +14,9 @@ import Observation
 final class AppModel {
 
     enum Route: Equatable {
+        /// One-time first-launch sign-in offer, shown before Main Menu ever
+        /// appears — see `LocalProfile.hasSeenWelcomeSignInPrompt`.
+        case welcomeSignIn
         case menu
         case createGame
         case joinGame
@@ -27,7 +30,7 @@ final class AppModel {
         case practice
     }
 
-    var route: Route = .menu
+    var route: Route
     /// One-line banner shown on the menu after a party closes under us.
     var partyClosedMessage: String?
 
@@ -53,7 +56,25 @@ final class AppModel {
         self.audio = AudioDirector(profile: profile)
         audio.configureSession()
         engine.progress = progress
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-TTSkipWelcome") {
+            profile.hasSeenWelcomeSignInPrompt = true
+        } else if arguments.contains("-TTShowWelcome") {
+            profile.hasSeenWelcomeSignInPrompt = false
+        }
+        #endif
+        route = profile.hasSeenWelcomeSignInPrompt ? .menu : .welcomeSignIn
         wireParty()
+    }
+
+    /// Skip tapped, or a sign-in attempt (successful or not) resolved —
+    /// either way the one-time prompt is done; permanent, never shown again.
+    func dismissWelcomeSignInPrompt() {
+        profile.hasSeenWelcomeSignInPrompt = true
+        if route == .welcomeSignIn {
+            route = .menu
+        }
     }
 
     private func wireParty() {

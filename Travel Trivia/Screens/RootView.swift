@@ -33,6 +33,9 @@ struct RootView: View {
     @ViewBuilder
     private var content: some View {
         switch app.route {
+        case .welcomeSignIn:
+            WelcomeSignInView()
+                .transition(.opacity)
         case .menu:
             MainMenuView()
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))

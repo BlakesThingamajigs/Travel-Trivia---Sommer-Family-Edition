@@ -64,6 +64,7 @@ final class Travel_TriviaUITests: XCTestCase {
     @MainActor
     func testCreateGameFlowReachesLobbyAndBacksOut() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-TTSkipWelcome"]
         app.launch()
 
         let create = app.buttons["menu-create"]
@@ -193,7 +194,7 @@ final class Travel_TriviaUITests: XCTestCase {
     @MainActor
     func testGarageCustomizationPersistsAcrossRelaunch() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-TTResetProgress"]
+        app.launchArguments = ["-TTResetProgress", "-TTSkipWelcome"]
         app.launch()
 
         app.buttons["menu-garage"].tap()
@@ -206,6 +207,7 @@ final class Travel_TriviaUITests: XCTestCase {
         app.terminate()
 
         let app2 = XCUIApplication()
+        app2.launchArguments = ["-TTSkipWelcome"]
         app2.launch()
         app2.buttons["menu-garage"].tap()
         let hatCapAgain = app2.buttons["cosmetic-hat-cap"]
@@ -222,6 +224,7 @@ final class Travel_TriviaUITests: XCTestCase {
     @MainActor
     func testSixSeatCarRendersAllSeatsInOurRide() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-TTSkipWelcome"]
         app.launch()
 
         app.buttons["menu-create"].tap()
@@ -253,7 +256,7 @@ final class Travel_TriviaUITests: XCTestCase {
     @MainActor
     func testExpandedGarageCustomizationScreenshots() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-TTResetProgress", "-TTGrantCoins", "500"]
+        app.launchArguments = ["-TTResetProgress", "-TTGrantCoins", "500", "-TTSkipWelcome"]
         app.launch()
 
         app.buttons["menu-garage"].tap()
@@ -285,6 +288,7 @@ final class Travel_TriviaUITests: XCTestCase {
     @MainActor
     func testLeaveGameButtonReachableMidGameAndReturnsToMenu() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-TTSkipWelcome"]
         app.launch()
 
         app.buttons["menu-create"].tap()
@@ -329,6 +333,7 @@ final class Travel_TriviaUITests: XCTestCase {
     @MainActor
     func testDifficultyLabelsAndSummaryChipsRenderWithoutTruncation() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-TTSkipWelcome"]
         app.launch()
 
         app.buttons["menu-create"].tap()
@@ -358,7 +363,7 @@ final class Travel_TriviaUITests: XCTestCase {
     @MainActor
     func testCoinShopPurchaseDeductsBalanceAndPersistsAcrossRelaunch() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-TTResetProgress", "-TTGrantCoins", "100"]
+        app.launchArguments = ["-TTResetProgress", "-TTGrantCoins", "100", "-TTSkipWelcome"]
         app.launch()
 
         app.buttons["menu-garage"].tap()
@@ -377,6 +382,7 @@ final class Travel_TriviaUITests: XCTestCase {
         app.terminate()
 
         let app2 = XCUIApplication()
+        app2.launchArguments = ["-TTSkipWelcome"]
         app2.launch()
         app2.buttons["menu-garage"].tap()
         let bowtieAgain = app2.buttons["cosmetic-acc-bowtie"]
@@ -391,6 +397,7 @@ final class Travel_TriviaUITests: XCTestCase {
     @MainActor
     func testSettingsEditsPersistLocally() throws {
         let app = XCUIApplication()
+        app.launchArguments = ["-TTSkipWelcome"]
         app.launch()
 
         XCTAssertTrue(app.buttons["menu-settings"].waitForExistence(timeout: 5))
@@ -405,6 +412,87 @@ final class Travel_TriviaUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["menu-create"].waitForExistence(timeout: 5),
                       "Back from Settings should return to the menu")
+    }
+
+    /// First-launch sign-in prompt: -TTShowWelcome forces the "fresh
+    /// install" state deterministically (regardless of what earlier test
+    /// runs left in this simulator's UserDefaults). Confirms Skip lands on
+    /// Main Menu and that the skip is permanent -- a later bare relaunch
+    /// (same app container, no special args) goes straight to Main Menu
+    /// instead of showing the prompt again.
+    @MainActor
+    func testFirstLaunchWelcomePromptSkipIsPermanent() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTShowWelcome"]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["welcome-skip"].waitForExistence(timeout: 5),
+                      "Fresh install should show the welcome sign-in prompt before Main Menu")
+        XCTAssertTrue(app.buttons["welcome-signin-apple"].exists)
+        XCTAssertTrue(app.buttons["welcome-signin-google"].exists)
+        XCTAssertFalse(app.buttons["menu-create"].exists,
+                        "Main Menu shouldn't be reachable underneath the first-launch prompt")
+
+        app.buttons["welcome-skip"].tap()
+        XCTAssertTrue(app.buttons["menu-create"].waitForExistence(timeout: 5),
+                      "Skipping should land on Main Menu")
+
+        app.terminate()
+
+        // No -TTShowWelcome this time -- the skip from above should have
+        // persisted, so a plain relaunch goes straight to Main Menu.
+        let app2 = XCUIApplication()
+        app2.launch()
+        XCTAssertTrue(app2.buttons["menu-create"].waitForExistence(timeout: 5),
+                      "The prompt should never reappear once skipped")
+        XCTAssertFalse(app2.buttons["welcome-skip"].exists)
+    }
+
+    /// Confirms the welcome prompt's Apple button reaches the exact same
+    /// real ASAuthorizationController flow Settings' sign-in button does --
+    /// not a separate/stubbed path.
+    @MainActor
+    func testFirstLaunchWelcomePromptSignInWithAppleTriggersSystemAuthFlow() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTShowWelcome"]
+        app.launch()
+
+        let appleButton = app.buttons["welcome-signin-apple"]
+        XCTAssertTrue(appleButton.waitForExistence(timeout: 5))
+        appleButton.tap()
+
+        RunLoop.current.run(until: Date().addingTimeInterval(3))
+        let screenshot = app.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = "welcome-apple-signin-live-attempt"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    /// Hosting a party has never required being signed in -- confirms the
+    /// first-launch prompt doesn't quietly introduce that requirement.
+    /// Skips the prompt, then hosts a party exactly like
+    /// testCreateGameFlowReachesLobbyAndBacksOut, all while signed out.
+    @MainActor
+    func testHostingRemainsAccountFreeAfterSkippingWelcomePrompt() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTShowWelcome"]
+        app.launch()
+
+        app.buttons["welcome-skip"].tap()
+        XCTAssertTrue(app.buttons["menu-create"].waitForExistence(timeout: 5))
+        app.buttons["menu-create"].tap()
+        app.buttons["mode-three-strikes"].tap()
+        app.buttons["genre-riddle-realm"].tap()
+        app.buttons["difficulty-family-mix"].tap()
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText("No Account Needed")
+        app.buttons["create-party"].tap()
+
+        XCTAssertTrue(app.buttons["lobby-start"].waitForExistence(timeout: 8),
+                      "Hosting should succeed with no sign-in at all")
     }
 
     /// Real sign-in test (Part I, Real Google/Apple Sign-In): tapping the
