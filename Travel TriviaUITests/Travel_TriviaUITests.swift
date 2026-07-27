@@ -246,6 +246,41 @@ final class Travel_TriviaUITests: XCTestCase {
         add(summaryScreenshot)
     }
 
+    /// My Garage coin shop: buying a priced cosmetic deducts its coin price,
+    /// unlocks it, and both the balance and the unlock survive a relaunch —
+    /// the coin-shop equivalent of `testGarageCustomizationPersistsAcrossRelaunch`.
+    @MainActor
+    func testCoinShopPurchaseDeductsBalanceAndPersistsAcrossRelaunch() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTResetProgress", "-TTGrantCoins", "100"]
+        app.launch()
+
+        app.buttons["menu-garage"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '100'"))
+            .firstMatch.waitForExistence(timeout: 5), "Granted coin balance should show 100")
+
+        let bowtie = app.buttons["cosmetic-acc-bowtie"]
+        XCTAssertTrue(bowtie.waitForExistence(timeout: 5))
+        XCTAssertEqual(bowtie.value as? String, "locked", "Priced items start locked, not badge-gated")
+        bowtie.tap()
+        XCTAssertEqual(bowtie.value as? String, "equipped",
+                       "Buying an affordable item should unlock and equip it")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '70'"))
+            .firstMatch.waitForExistence(timeout: 5), "Balance should drop by the bow tie's 30-coin price")
+
+        app.terminate()
+
+        let app2 = XCUIApplication()
+        app2.launch()
+        app2.buttons["menu-garage"].tap()
+        let bowtieAgain = app2.buttons["cosmetic-acc-bowtie"]
+        XCTAssertTrue(bowtieAgain.waitForExistence(timeout: 5))
+        XCTAssertEqual(bowtieAgain.value as? String, "equipped",
+                       "Purchased cosmetic should still be unlocked/equipped after relaunch")
+        XCTAssertTrue(app2.staticTexts.matching(NSPredicate(format: "label CONTAINS '70'"))
+            .firstMatch.waitForExistence(timeout: 5), "Coin balance should also persist across relaunch")
+    }
+
     /// Settings persists the display name and toggles.
     @MainActor
     func testSettingsEditsPersistLocally() throws {

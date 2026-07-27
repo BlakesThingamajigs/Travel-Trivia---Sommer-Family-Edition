@@ -54,6 +54,9 @@ final class GameEngine {
     /// The mode this party is playing (nil in practice, which is always
     /// plain Three Strikes).
     private(set) var activeModeSlug: String?
+    /// The difficulty this party is playing (practice has no difficulty
+    /// picker, so it always pays out at the Family Mix rate).
+    private(set) var activeDifficulty: DifficultyTier = .familyMix
     /// Copilot's Curveball: the current question is in its early-reveal
     /// window — only the copilot's device may show it.
     private(set) var curveballPreviewActive = false
@@ -356,6 +359,7 @@ final class GameEngine {
         confettiTrigger += 1
         phase = .victory
         evaluateBadges()
+        awardCoinsForVictory()
     }
 
     /// Exposed so tests can await the scheduled reveal/advance step.
@@ -405,6 +409,16 @@ final class GameEngine {
         }
     }
 
+    // MARK: - Coin shop
+
+    /// Awarded once a round reaches victory, if the local player won.
+    private func awardCoinsForVictory() {
+        guard let progress, winner?.isUser == true else { return }
+        let modeSlug = activeModeSlug ?? "three-strikes"
+        let coins = CoinPayout.coinsForWin(modeSlug: modeSlug, difficulty: activeDifficulty)
+        progress.awardCoins(coins)
+    }
+
     // MARK: - Party mirroring
 
     /// Joins this engine to a live party: local taps route through the
@@ -437,6 +451,7 @@ final class GameEngine {
         activeGenreName = "Riddle Realm"
         activeGenreSlug = "riddle-realm"
         activeModeSlug = nil
+        activeDifficulty = .familyMix
         wagerWindowActive = false
         userSubmittedWager = nil
         teamTurnPlayerIDs = [nil, nil]
@@ -453,6 +468,7 @@ final class GameEngine {
         syncPlayers(from: state)
 
         activeModeSlug = state.config.modeSlug
+        activeDifficulty = state.config.difficulty
         let round = state.round
         if let round {
             if questions.map(\.id) != round.questions.map(\.id) {
@@ -507,6 +523,7 @@ final class GameEngine {
         if state.phase == .victory, lastSyncedPhase != .victory {
             confettiTrigger += 1
             evaluateBadges()
+            awardCoinsForVictory()
         }
         if state.phase == .ride, lastSyncedPhase != .ride {
             userPickedOptionID = nil

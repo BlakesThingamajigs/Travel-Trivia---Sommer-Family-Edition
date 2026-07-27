@@ -23,6 +23,9 @@ final class ProgressStore {
     private(set) var earnedBadgeIDs: Set<String> = []
     private(set) var avatarLoadout: AvatarLoadout
     private(set) var carLoadout: CarLoadout
+    private(set) var coinWallet: CoinWallet
+    private(set) var purchasedItemIDs: Set<String> = []
+    var coinBalance: Int { coinWallet.balance }
 
     /// Queued the instant a badge is newly earned; screens observe the
     /// front of the queue to fire the celebration moment, then call
@@ -61,14 +64,50 @@ final class ProgressStore {
             context.insert(fresh)
             carLoadout = fresh
         }
+
+        let walletFetch = FetchDescriptor<CoinWallet>(
+            predicate: #Predicate { $0.playerID == playerID })
+        if let existing = (try? context.fetch(walletFetch))?.first {
+            coinWallet = existing
+        } else {
+            let fresh = CoinWallet(playerID: playerID)
+            context.insert(fresh)
+            coinWallet = fresh
+        }
+
+        let purchaseFetch = FetchDescriptor<PurchasedCosmetic>(
+            predicate: #Predicate { $0.playerID == playerID })
+        purchasedItemIDs = Set(((try? context.fetch(purchaseFetch)) ?? []).map(\.itemID))
+
         try? context.save()
     }
 
-    // MARK: - Unlock gating
+    // MARK: - Unlock gating / coin shop
 
     func isUnlocked(_ item: CosmeticItem) -> Bool {
-        guard let badgeID = item.unlockBadgeID else { return true }
-        return earnedBadgeIDs.contains(badgeID)
+        item.price == 0 || purchasedItemIDs.contains(item.id)
+    }
+
+    /// Awards coins for a game won — the shop's spend currency. See
+    /// `CoinPayout` for the scheme.
+    func awardCoins(_ amount: Int) {
+        guard amount > 0 else { return }
+        coinWallet.balance += amount
+        save()
+    }
+
+    /// Buys an unpurchased, affordable item, deducting its price and
+    /// unlocking it permanently. Returns whether the purchase went through.
+    @discardableResult
+    func purchase(_ item: CosmeticItem) -> Bool {
+        guard item.price > 0, !purchasedItemIDs.contains(item.id),
+              coinWallet.balance >= item.price
+        else { return false }
+        coinWallet.balance -= item.price
+        purchasedItemIDs.insert(item.id)
+        context.insert(PurchasedCosmetic(playerID: playerID, itemID: item.id))
+        save()
+        return true
     }
 
     // MARK: - Equip
@@ -154,6 +193,17 @@ final class ProgressStore {
         carLoadout.decalID = "decal-none"
         carLoadout.accessoryID = "cartop-none"
         celebrationQueue = []
+
+        for itemID in purchasedItemIDs {
+            let fetch = FetchDescriptor<PurchasedCosmetic>(
+                predicate: #Predicate { $0.playerID == playerID && $0.itemID == itemID })
+            for row in (try? context.fetch(fetch)) ?? [] {
+                context.delete(row)
+            }
+        }
+        purchasedItemIDs = []
+        coinWallet.balance = 0
+
         save()
     }
     #endif

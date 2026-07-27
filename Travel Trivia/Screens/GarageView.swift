@@ -31,6 +31,9 @@ struct GarageView: View {
             }
             .padding(.horizontal, 20)
 
+            StickerChip(text: "🪙 \(app.progress.coinBalance) COINS", fill: TT.sunshine, textSize: 13)
+                .accessibilityIdentifier("garage-coin-balance")
+
             tabPicker
 
             ScrollView {
@@ -153,8 +156,15 @@ struct GarageView: View {
 
     private func cosmeticButton(item: CosmeticItem, isEquipped: Bool, action: @escaping () -> Void) -> some View {
         let unlocked = app.progress.isUnlocked(item)
+        let canAfford = app.progress.coinBalance >= item.price
         return Button {
-            if unlocked { action() }
+            if unlocked {
+                action()
+            } else if canAfford, app.progress.purchase(item) {
+                // Buying it was an explicit choice to wear/drive it now —
+                // equip immediately instead of making the player tap twice.
+                action()
+            }
         } label: {
             VStack(spacing: 3) {
                 ZStack {
@@ -176,23 +186,20 @@ struct GarageView: View {
                     .lineLimit(1)
                     .frame(width: 60)
 
-                if !unlocked, let badgeID = item.unlockBadgeID,
-                   let badge = BadgeCatalog.definition(for: badgeID, catalog: app.catalog) {
-                    Text(badge.title.uppercased())
-                        .font(TT.font(6.5, .black))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
+                if !unlocked {
+                    Text("🪙 \(item.price)")
+                        .font(TT.font(8, .black))
+                        .foregroundStyle(.white.opacity(canAfford ? 1 : 0.6))
                         .frame(width: 60)
                 }
             }
         }
         .buttonStyle(.bubble)
-        .disabled(!unlocked)
-        .opacity(unlocked ? 1 : 0.7)
+        .disabled(!unlocked && !canAfford)
+        .opacity(unlocked ? 1 : (canAfford ? 0.85 : 0.55))
         .accessibilityIdentifier("cosmetic-\(item.id)")
-        // UI-test hook: lets tests confirm equip state round-trips (and
-        // persists across relaunch) without needing pixel comparisons.
+        // UI-test hook: lets tests confirm equip/purchase state round-trips
+        // (and persists across relaunch) without needing pixel comparisons.
         .accessibilityValue(isEquipped ? "equipped" : (unlocked ? "unlocked" : "locked"))
     }
 }

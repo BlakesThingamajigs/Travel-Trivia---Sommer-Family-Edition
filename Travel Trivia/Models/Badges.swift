@@ -6,8 +6,9 @@
 //  (flagged in the session report). Badges are earned by the local player
 //  only (no accounts for non-host riders, so "party-wide" isn't
 //  representable without breaking the no-account model) and persist
-//  forever on this device once earned — they're the unlock currency for
-//  My Garage cosmetics.
+//  forever on this device once earned — pure achievements, tracked in My
+//  Garage's Badges tab. They no longer gate cosmetic unlocks (coins do,
+//  see CoinWallet/CosmeticItem.price).
 //
 
 import Foundation

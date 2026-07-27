@@ -978,6 +978,68 @@ struct ProgressStoreTests {
         #expect(progress.earnedBadgeIDs.contains(BadgeCatalog.genreCompletionID("riddle-realm")))
         #expect(progress.earnedBadgeIDs.contains(BadgeCatalog.perfectRoundID))
     }
+
+    /// Winning a practice round (no mode/difficulty picker, so Three
+    /// Strikes at the Family Mix rate) pays out base×familyMix coins, and
+    /// badges no longer gate cosmetic unlocks — only the coin price does.
+    @Test func winningARoundAwardsCoinsAndBadgesNoLongerGateCosmetics() async throws {
+        let engineHarness = try EngineHarness()
+        let engine = engineHarness.engine
+        let progressConfig = ModelConfiguration(isStoredInMemoryOnly: true)
+        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
+                                                   configurations: progressConfig)
+        let progress = ProgressStore(context: progressContainer.mainContext, playerID: UUID())
+        engine.progress = progress
+
+        engine.botRoll = { 0.99 }  // both bots miss every question, user wins fast
+        engine.startGame(seed: 7)
+        for _ in 0..<3 {
+            let question = try #require(engine.currentQuestion)
+            engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
+            await engine.waitForPendingAdvance()
+        }
+
+        #expect(engine.phase == .victory)
+        #expect(progress.coinBalance == CoinPayout.coinsForWin(modeSlug: "three-strikes", difficulty: .familyMix))
+
+        // The round win also earns badges (genre completion, mode mastery,
+        // perfect round) — badges keep working as pure achievements, they
+        // just no longer gate this cosmetic.
+        #expect(progress.earnedBadgeIDs.contains(BadgeCatalog.perfectRoundID))
+        let partyHat = CosmeticCatalog.item("hat-party", in: CosmeticCatalog.hats)
+        #expect(progress.isUnlocked(partyHat) == false)
+        #expect(progress.purchase(partyHat) == false, "shouldn't be affordable off a single fast win")
+        // Top up from further wins to afford it, same as a real player would.
+        progress.awardCoins(partyHat.price)
+        let startingBalance = progress.coinBalance
+        #expect(progress.purchase(partyHat) == true)
+        #expect(progress.isUnlocked(partyHat) == true)
+        #expect(progress.coinBalance == startingBalance - partyHat.price)
+        // Buying the same item twice doesn't double-charge.
+        #expect(progress.purchase(partyHat) == false)
+        #expect(progress.coinBalance == startingBalance - partyHat.price)
+    }
+
+    /// Coins and purchases persist across a relaunch exactly like badges do.
+    @Test func coinsAndPurchasesPersistAcrossANewContainer() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appending(path: "progress-coins-test-\(UUID().uuidString).store")
+        let configuration = ModelConfiguration(url: storeURL)
+        let playerID = UUID()
+
+        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
+                                            configurations: configuration)
+        let progress1 = ProgressStore(context: container1.mainContext, playerID: playerID)
+        progress1.awardCoins(100)
+        let bowtie = CosmeticCatalog.item("acc-bowtie", in: CosmeticCatalog.accessories)
+        #expect(progress1.purchase(bowtie) == true)
+
+        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
+                                            configurations: configuration)
+        let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
+        #expect(progress2.coinBalance == 100 - bowtie.price)
+        #expect(progress2.isUnlocked(bowtie) == true)
+    }
 }
 
 /// Nav-prompt audio pausing (Part E follow-up): built against

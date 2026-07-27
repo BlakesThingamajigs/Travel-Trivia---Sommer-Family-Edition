@@ -127,6 +127,12 @@ final class AppModel {
         if arguments.contains("-TTResetProgress") {
             progress.debugResetAll()
         }
+        // -TTGrantCoins <n>: deterministic coin balance for shop UI tests,
+        // rather than depending on a scripted win's exact payout.
+        if let i = arguments.firstIndex(of: "-TTGrantCoins"), arguments.count > i + 1,
+           let amount = Int(arguments[i + 1]) {
+            progress.awardCoins(amount)
+        }
         if arguments.contains("-TTSettings") {
             route = .settings
         }
