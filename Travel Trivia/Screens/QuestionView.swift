@@ -18,6 +18,13 @@ struct QuestionView: View {
         engine.userPlayer?.isOut ?? true
     }
 
+    /// Party mode: answered, waiting on the rest of the car to resolve.
+    private var lockedIn: Bool {
+        engine.playContext != .practice
+            && engine.turnState == .awaitingAnswer
+            && engine.userPickedOptionID != nil
+    }
+
     var body: some View {
         VStack(spacing: 10) {
             header
@@ -34,6 +41,11 @@ struct QuestionView: View {
                     StickerChip(text: "YOU'RE OUT — ENJOY THE RIDE!",
                                 fill: TT.cherry, textColor: .white, textSize: 13)
                         .transition(.scale.combined(with: .opacity))
+                } else if lockedIn {
+                    StickerChip(text: "LOCKED IN — WAITING FOR THE CAR…",
+                                fill: TT.sunshine, textSize: 12)
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityIdentifier("locked-in")
                 }
 
                 Spacer(minLength: 8)
@@ -102,7 +114,8 @@ private struct RiddleCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                StickerChip(text: "RIDDLE REALM", fill: TT.grape, textColor: .white, textSize: 11)
+                StickerChip(text: engine.activeGenreName.uppercased(),
+                            fill: TT.grape, textColor: .white, textSize: 11)
                 StickerChip(text: question.difficulty.displayName,
                             fill: difficultyColor, textColor: .white, textSize: 11)
                 Spacer()
@@ -183,6 +196,14 @@ private struct PlayerBubble: View {
                         StickerChip(text: "OUT", fill: TT.cherry, textColor: .white, textSize: 8)
                             .rotationEffect(.degrees(12))
                             .offset(x: 10, y: -6)
+                    } else if player.presence == .dropped {
+                        StickerChip(text: "LOST", fill: TT.tangerine, textColor: .white, textSize: 8)
+                            .rotationEffect(.degrees(12))
+                            .offset(x: 10, y: -6)
+                    } else if player.presence == .left {
+                        StickerChip(text: "GONE", fill: TT.asphalt, textColor: .white, textSize: 8)
+                            .rotationEffect(.degrees(12))
+                            .offset(x: 10, y: -6)
                     }
                 }
             Text(player.name)
@@ -192,9 +213,10 @@ private struct PlayerBubble: View {
             StrikePips(player: player)
         }
         .frame(width: 72)
-        .opacity(player.isOut ? 0.55 : 1)
-        .saturation(player.isOut ? 0.25 : 1)
+        .opacity(player.isOut || player.presence != .connected ? 0.55 : 1)
+        .saturation(player.isOut || player.presence != .connected ? 0.25 : 1)
         .animation(.spring(response: 0.4, dampingFraction: 0.6), value: player.isOut)
+        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: player.presence)
     }
 }
 
@@ -251,7 +273,13 @@ private struct AnswerButton: View {
     }
     private var buttonColor: Color { TT.answerColors[index % TT.answerColors.count] }
     private var userCanAnswer: Bool {
-        engine.turnState == .awaitingAnswer && !(engine.userPlayer?.isOut ?? true)
+        engine.turnState == .awaitingAnswer
+            && engine.userPickedOptionID == nil
+            && !(engine.userPlayer?.isOut ?? true)
+    }
+    /// Party mode: my pick, locked in while the rest of the car answers.
+    private var isLockedInPick: Bool {
+        engine.turnState == .awaitingAnswer && engine.userPickedOptionID == option.id
     }
 
     var body: some View {
@@ -268,7 +296,7 @@ private struct AnswerButton: View {
                 .frame(maxWidth: .infinity, minHeight: 82)
                 .sticker(RoundedRectangle(cornerRadius: 18), fill: buttonColor)
                 .overlay {
-                    if isRevealing && isCorrectOption {
+                    if (isRevealing && isCorrectOption) || isLockedInPick {
                         RoundedRectangle(cornerRadius: 18)
                             .strokeBorder(.white, lineWidth: 4)
                             .padding(2)

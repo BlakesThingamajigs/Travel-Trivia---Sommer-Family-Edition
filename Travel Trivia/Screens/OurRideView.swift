@@ -2,14 +2,20 @@
 //  OurRideView.swift
 //  Travel Trivia
 //
-//  The seat picker: a top-down car on the road. Three players are already
-//  aboard; tapping the open seat "joins" the 4th (mock) player.
+//  The seat picker: a top-down car on the road. In a real party every
+//  device claims (or moves to) a seat and the host syncs the arrangement
+//  to the whole car; in practice mode the open seat "joins" the 4th mock
+//  player, exactly as in session 1.
 //
 
 import SwiftUI
 
 struct OurRideView: View {
     @Environment(GameEngine.self) private var engine
+
+    private var unseated: [Player] {
+        engine.players.filter { !$0.isSeated && $0.presence != .left }
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -25,8 +31,37 @@ struct OurRideView: View {
                     ConfettiBurst(trigger: engine.joinTrigger, origin: .init(x: 0.5, y: 0.6))
                 }
 
+            if !unseated.isEmpty {
+                HStack(spacing: 14) {
+                    ForEach(unseated, id: \.persistentModelID) { player in
+                        VStack(spacing: 2) {
+                            AvatarHead(color: TT.avatarColors[player.colorIndex % TT.avatarColors.count],
+                                       expression: .idle, size: 34)
+                            StickerChip(text: player.isUser ? "YOU" : player.name,
+                                        textSize: 9)
+                        }
+                    }
+                    StickerChip(text: "STILL PICKING…", fill: TT.sunshine, textSize: 10)
+                }
+                .padding(.top, 6)
+                .transition(.scale.combined(with: .opacity))
+            }
+
             Spacer(minLength: 12)
 
+            footer
+                .padding(.bottom, 18)
+        }
+        .padding(.horizontal, 20)
+        .background {
+            RoadStrip(width: 384)
+        }
+        .animation(.spring(response: 0.45, dampingFraction: 0.6), value: unseated.count)
+    }
+
+    @ViewBuilder
+    private var footer: some View {
+        if engine.canControlFlow {
             Button {
                 engine.startGame()
             } label: {
@@ -34,11 +69,11 @@ struct OurRideView: View {
             }
             .buttonStyle(.bubble)
             .accessibilityIdentifier("start-trip")
-            .padding(.bottom, 18)
-        }
-        .padding(.horizontal, 20)
-        .background {
-            RoadStrip(width: 384)
+        } else {
+            StickerChip(text: "THE HOST STARTS THE TRIP…",
+                        fill: TT.sunshine, textSize: 12)
+                .padding(.vertical, 12)
+                .accessibilityIdentifier("ride-waiting")
         }
     }
 }
@@ -124,15 +159,22 @@ private struct CarTopDownView: View {
 
     @ViewBuilder
     private func seatView(index: Int) -> some View {
-        let player = engine.players.first { $0.seatIndex == index }
+        let player = engine.players.first { $0.seatIndex == index && $0.presence != .left }
         ZStack {
             SeatBase()
             if let player {
                 OccupiedSeat(player: player)
                     .transition(.scale(scale: 0.2).combined(with: .opacity))
-            } else {
-                OpenSeat {
+            } else if engine.playContext == .practice {
+                // Session-1 slice: the open seat joins the 4th mock player.
+                OpenSeat(label: "TAP TO JOIN") {
                     engine.joinOpenSeat()
+                }
+            } else {
+                // Real party: any free seat is up for grabs for *you*
+                // (tapping a different one moves you; the host arbitrates).
+                OpenSeat(label: "TAP TO SIT") {
+                    engine.requestSeat(index)
                 }
             }
         }
@@ -160,20 +202,41 @@ private struct SeatBase: View {
 private struct OccupiedSeat: View {
     var player: Player
 
+    private var dropped: Bool { player.presence == .dropped }
+
     var body: some View {
         VStack(spacing: -2) {
             AvatarFullBody(color: TT.avatarColors[player.colorIndex % TT.avatarColors.count],
-                           expression: .happy,
+                           expression: dropped ? .sad : .happy,
                            height: 84)
             StickerChip(text: player.isUser ? "\(player.name) (You)" : player.name,
                         fill: player.isUser ? TT.sunshine : TT.paper,
                         textSize: 11)
         }
         .offset(y: 8)
+        .opacity(dropped ? 0.45 : 1)
+        .saturation(dropped ? 0.25 : 1)
+        .overlay(alignment: .top) {
+            if dropped {
+                StickerChip(text: "BACK SOON…", fill: TT.tangerine,
+                            textColor: .white, textSize: 8)
+                    .rotationEffect(.degrees(-8))
+                    .offset(y: -4)
+            }
+            if let badge = player.role.badge, !dropped {
+                StickerChip(text: badge,
+                            fill: player.role == .pilot ? TT.cherry : TT.skyDeep,
+                            textColor: .white, textSize: 8)
+                    .rotationEffect(.degrees(-8))
+                    .offset(y: -6)
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.6), value: dropped)
     }
 }
 
 private struct OpenSeat: View {
+    var label: String = "TAP TO JOIN"
     var join: () -> Void
     @State private var pulsing = false
 
@@ -189,7 +252,7 @@ private struct OpenSeat: View {
                         .foregroundStyle(TT.paper)
                         .scaleEffect(pulsing ? 1.18 : 0.94)
                 }
-                StickerChip(text: "TAP TO JOIN", fill: TT.lime, textColor: .white, textSize: 10)
+                StickerChip(text: label, fill: TT.lime, textColor: .white, textSize: 10)
             }
         }
         .buttonStyle(.bubble)

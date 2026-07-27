@@ -36,14 +36,20 @@ struct VictoryView: View {
 
             Spacer()
 
-            Button {
-                engine.backToRide()
-            } label: {
-                RoadSignLabel(title: "Back to the Ride", color: TT.skyDeep)
+            if engine.canControlFlow {
+                Button {
+                    engine.backToRide()
+                } label: {
+                    RoadSignLabel(title: "Back to the Ride", color: TT.skyDeep)
+                }
+                .buttonStyle(.bubble)
+                .accessibilityIdentifier("back-to-ride")
+                .padding(.bottom, 20)
+            } else {
+                StickerChip(text: "THE HOST PICKS THE NEXT STOP…",
+                            fill: TT.sunshine, textSize: 12)
+                    .padding(.bottom, 26)
             }
-            .buttonStyle(.bubble)
-            .accessibilityIdentifier("back-to-ride")
-            .padding(.bottom, 20)
         }
         .padding(.horizontal, 24)
         .overlay {
