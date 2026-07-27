@@ -11,7 +11,7 @@ import SwiftData
 @main
 struct Travel_TriviaApp: App {
     private let container: ModelContainer
-    @State private var engine: GameEngine
+    @State private var app: AppModel
 
     init() {
         // Party/session state models a live in-car party — deliberately
@@ -19,13 +19,17 @@ struct Travel_TriviaApp: App {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try! ModelContainer(for: Player.self, configurations: configuration)
         self.container = container
-        _engine = State(initialValue: GameEngine(context: container.mainContext))
+        _app = State(initialValue: AppModel(engine: GameEngine(context: container.mainContext)))
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
-                .environment(engine)
+                .environment(app)
+                .environment(app.engine)
+                .task {
+                    await app.catalog.refresh()
+                }
         }
         .modelContainer(container)
     }
