@@ -27,7 +27,10 @@ struct VictoryView: View {
                                height: 210,
                                hatID: winner.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
                                accessoryID: winner.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
-                               stickerID: winner.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
+                               stickerID: winner.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none",
+                               hairID: winner.isUser ? app.progress.avatarLoadout.hairID : "hair-none",
+                               faceMarkID: winner.isUser ? app.progress.avatarLoadout.faceMarkID : "face-none",
+                               headShapeID: winner.isUser ? app.progress.avatarLoadout.headShapeID : "shape-round")
                     .victoryDance()
 
                 StickerChip(text: winner.isUser ? "\(winner.name) (You)" : winner.name,

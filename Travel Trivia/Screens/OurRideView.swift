@@ -40,7 +40,10 @@ struct OurRideView: View {
                                        expression: .idle, size: 34,
                                        hatID: player.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
                                        accessoryID: player.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
-                                       stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
+                                       stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none",
+                                       hairID: player.isUser ? app.progress.avatarLoadout.hairID : "hair-none",
+                                       faceMarkID: player.isUser ? app.progress.avatarLoadout.faceMarkID : "face-none",
+                                       headShapeID: player.isUser ? app.progress.avatarLoadout.headShapeID : "shape-round")
                             StickerChip(text: player.isUser ? "YOU" : player.name,
                                         textSize: 9)
                         }
@@ -222,7 +225,10 @@ private struct OccupiedSeat: View {
                            height: 78,
                            hatID: player.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
                            accessoryID: player.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
-                           stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
+                           stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none",
+                           hairID: player.isUser ? app.progress.avatarLoadout.hairID : "hair-none",
+                           faceMarkID: player.isUser ? app.progress.avatarLoadout.faceMarkID : "face-none",
+                           headShapeID: player.isUser ? app.progress.avatarLoadout.headShapeID : "shape-round")
             StickerChip(text: player.isUser ? "\(player.name) (You)" : player.name,
                         fill: player.isUser ? TT.sunshine : TT.paper,
                         textSize: 11)

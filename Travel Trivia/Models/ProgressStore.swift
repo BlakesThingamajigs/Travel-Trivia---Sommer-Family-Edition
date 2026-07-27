@@ -130,6 +130,24 @@ final class ProgressStore {
         save()
     }
 
+    func equipHair(_ id: String) {
+        guard isUnlocked(CosmeticCatalog.item(id, in: CosmeticCatalog.hairstyles)) else { return }
+        avatarLoadout.hairID = id
+        save()
+    }
+
+    func equipFaceMark(_ id: String) {
+        guard isUnlocked(CosmeticCatalog.item(id, in: CosmeticCatalog.faceMarks)) else { return }
+        avatarLoadout.faceMarkID = id
+        save()
+    }
+
+    func equipHeadShape(_ id: String) {
+        guard isUnlocked(CosmeticCatalog.item(id, in: CosmeticCatalog.headShapes)) else { return }
+        avatarLoadout.headShapeID = id
+        save()
+    }
+
     func equipCarColor(_ id: String) {
         guard isUnlocked(CosmeticCatalog.item(id, in: CosmeticCatalog.carColors)) else { return }
         carLoadout.colorID = id
@@ -189,6 +207,9 @@ final class ProgressStore {
         avatarLoadout.hatID = "hat-none"
         avatarLoadout.accessoryID = "acc-none"
         avatarLoadout.stickerID = "sticker-none"
+        avatarLoadout.hairID = "hair-none"
+        avatarLoadout.faceMarkID = "face-none"
+        avatarLoadout.headShapeID = "shape-round"
         carLoadout.colorID = "car-cherry"
         carLoadout.decalID = "decal-none"
         carLoadout.accessoryID = "cartop-none"

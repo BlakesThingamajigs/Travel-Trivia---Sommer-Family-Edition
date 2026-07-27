@@ -73,7 +73,10 @@ private struct ScoreboardRow: View {
                        size: 34,
                        hatID: player.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
                        accessoryID: player.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
-                       stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
+                       stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none",
+                       hairID: player.isUser ? app.progress.avatarLoadout.hairID : "hair-none",
+                       faceMarkID: player.isUser ? app.progress.avatarLoadout.faceMarkID : "face-none",
+                       headShapeID: player.isUser ? app.progress.avatarLoadout.headShapeID : "shape-round")
             VStack(alignment: .leading, spacing: 2) {
                 Text(player.isUser ? "\(player.name) (You)" : player.name)
                     .font(TT.font(14, .heavy))

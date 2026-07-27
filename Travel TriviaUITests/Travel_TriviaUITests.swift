@@ -246,6 +246,35 @@ final class Travel_TriviaUITests: XCTestCase {
         add(screenshot)
     }
 
+    /// Expanded avatar customization: screenshots the Avatar tab showing
+    /// the new SHAPE and HAIR rows alongside the existing HAT/ACCESSORY/
+    /// FACE/CHEEK STICKER rows, plus the expanded My Garage car tab with
+    /// the new color/decal/roof items.
+    @MainActor
+    func testExpandedGarageCustomizationScreenshots() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTResetProgress", "-TTGrantCoins", "500"]
+        app.launch()
+
+        app.buttons["menu-garage"].tap()
+        XCTAssertTrue(app.buttons["cosmetic-hair-mohawk"].waitForExistence(timeout: 5),
+                      "New HAIR row should be on the Avatar tab")
+        XCTAssertTrue(app.buttons["cosmetic-shape-square"].exists, "New SHAPE row should be on the Avatar tab")
+        XCTAssertTrue(app.buttons["cosmetic-face-mustache"].exists, "New FACE row should be on the Avatar tab")
+        let avatarScreenshot = XCTAttachment(screenshot: app.screenshot())
+        avatarScreenshot.name = "garage-avatar-expanded"
+        avatarScreenshot.lifetime = .keepAlways
+        add(avatarScreenshot)
+
+        app.buttons["garage-tab-my-garage"].tap()
+        XCTAssertTrue(app.buttons["cosmetic-car-sky"].waitForExistence(timeout: 5),
+                      "New car color should be on the My Garage tab")
+        let carScreenshot = XCTAttachment(screenshot: app.screenshot())
+        carScreenshot.name = "garage-car-expanded"
+        carScreenshot.lifetime = .keepAlways
+        add(carScreenshot)
+    }
+
     /// Leave Game: reachable from the mid-game scoreboard dropdown (not
     /// just the Lobby's back-out), and confirms tapping through it lands
     /// back on the Main Menu. The real party-continues-without-the-leaver

@@ -1086,6 +1086,38 @@ struct ProgressStoreTests {
         #expect(progress2.earnedBadgeIDs.contains(BadgeCatalog.perfectRoundID))
     }
 
+    /// Expanded avatar customization (hair/face mark/head shape): equipping
+    /// each new category persists across a relaunch exactly like the
+    /// original hat/accessory/sticker categories do.
+    @Test func expandedAvatarCategoriesEquipAndPersist() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appending(path: "progress-avatar-test-\(UUID().uuidString).store")
+        let configuration = ModelConfiguration(url: storeURL)
+        let playerID = UUID()
+
+        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
+                                            configurations: configuration)
+        let progress1 = ProgressStore(context: container1.mainContext, playerID: playerID)
+        #expect(progress1.avatarLoadout.headShapeID == "shape-round", "new fields should default sensibly on a fresh row")
+        #expect(progress1.avatarLoadout.hairID == "hair-none")
+        #expect(progress1.avatarLoadout.faceMarkID == "face-none")
+
+        progress1.equipHair("hair-mohawk")  // free item, no purchase needed
+        progress1.awardCoins(45 + 40)  // shape-square (45) + face-mustache (40)
+        #expect(progress1.purchase(CosmeticCatalog.item("shape-square", in: CosmeticCatalog.headShapes)) == true)
+        progress1.equipHeadShape("shape-square")
+        #expect(progress1.purchase(CosmeticCatalog.item("face-mustache", in: CosmeticCatalog.faceMarks)) == true)
+        progress1.equipFaceMark("face-mustache")
+
+        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
+                                            configurations: configuration)
+        let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
+        #expect(progress2.avatarLoadout.hairID == "hair-mohawk")
+        #expect(progress2.avatarLoadout.headShapeID == "shape-square")
+        #expect(progress2.avatarLoadout.faceMarkID == "face-mustache")
+        #expect(progress2.isUnlocked(CosmeticCatalog.item("shape-square", in: CosmeticCatalog.headShapes)))
+    }
+
     @Test func finishingARoundAwardsGenreCompletionAndPerfectRound() async throws {
         let engineHarness = try EngineHarness()
         let engine = engineHarness.engine

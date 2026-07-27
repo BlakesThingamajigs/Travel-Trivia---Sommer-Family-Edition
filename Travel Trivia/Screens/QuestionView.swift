@@ -365,7 +365,10 @@ private struct PlayerBubble: View {
                        size: 56,
                        hatID: player.isUser ? app.progress.avatarLoadout.hatID : "hat-none",
                        accessoryID: player.isUser ? app.progress.avatarLoadout.accessoryID : "acc-none",
-                       stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none")
+                       stickerID: player.isUser ? app.progress.avatarLoadout.stickerID : "sticker-none",
+                       hairID: player.isUser ? app.progress.avatarLoadout.hairID : "hair-none",
+                       faceMarkID: player.isUser ? app.progress.avatarLoadout.faceMarkID : "face-none",
+                       headShapeID: player.isUser ? app.progress.avatarLoadout.headShapeID : "shape-round")
                 .reactionBounce(trigger: player.lastAnswerCorrect == true ? engine.reactionTrigger : 0)
                 .shake(trigger: player.lastAnswerCorrect == false ? engine.reactionTrigger : 0)
                 .overlay(alignment: .topTrailing) {

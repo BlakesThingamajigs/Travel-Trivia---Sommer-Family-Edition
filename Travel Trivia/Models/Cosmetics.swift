@@ -19,7 +19,18 @@ import SwiftData
 
 struct CosmeticItem: Identifiable, Equatable {
     enum Category: String {
-        case hat, accessory, sticker          // avatar
+        // avatar
+        case hat, accessory, sticker
+        /// Static hairstyle — distinct from `AvatarExpression`, which is
+        /// the gameplay-driven happy/sad/idle/wow reaction, not a look the
+        /// player picks.
+        case hair
+        /// A static facial decoration (freckles, mustache, monocle) —
+        /// again distinct from the gameplay-driven expression.
+        case faceMark
+        /// The avatar's underlying head/body silhouette — real shape
+        /// variety, not just accessories layered on the same base circle.
+        case headShape
         case carColor, carDecal, carAccessory  // My Garage car
     }
 
@@ -38,6 +49,8 @@ enum CosmeticCatalog {
         .init(id: "hat-cap", category: .hat, displayName: "Road Cap", price: 0),
         .init(id: "hat-party", category: .hat, displayName: "Party Hat", price: 40),
         .init(id: "hat-crown", category: .hat, displayName: "Champ Crown", price: 60),
+        .init(id: "hat-beanie", category: .hat, displayName: "Beanie", price: 30),
+        .init(id: "hat-cowboy", category: .hat, displayName: "Cowboy Hat", price: 50),
     ]
 
     static let accessories: [CosmeticItem] = [
@@ -45,6 +58,8 @@ enum CosmeticCatalog {
         .init(id: "acc-shades", category: .accessory, displayName: "Shades", price: 0),
         .init(id: "acc-bowtie", category: .accessory, displayName: "Bow Tie", price: 30),
         .init(id: "acc-flower", category: .accessory, displayName: "Flower Crown", price: 50),
+        .init(id: "acc-scarf", category: .accessory, displayName: "Scarf", price: 35),
+        .init(id: "acc-headphones", category: .accessory, displayName: "Headphones", price: 45),
     ]
 
     static let stickers: [CosmeticItem] = [
@@ -52,6 +67,29 @@ enum CosmeticCatalog {
         .init(id: "sticker-star", category: .sticker, displayName: "Star Cheek", price: 0),
         .init(id: "sticker-heart", category: .sticker, displayName: "Heart Cheek", price: 30),
         .init(id: "sticker-lightning", category: .sticker, displayName: "Lightning Bolt", price: 45),
+        .init(id: "sticker-rainbow", category: .sticker, displayName: "Rainbow Cheek", price: 35),
+        .init(id: "sticker-paw", category: .sticker, displayName: "Paw Print", price: 30),
+    ]
+
+    static let hairstyles: [CosmeticItem] = [
+        .init(id: "hair-none", category: .hair, displayName: "No Hair", price: 0),
+        .init(id: "hair-mohawk", category: .hair, displayName: "Mohawk", price: 0),
+        .init(id: "hair-ponytail", category: .hair, displayName: "Ponytail", price: 35),
+        .init(id: "hair-curls", category: .hair, displayName: "Curls", price: 35),
+        .init(id: "hair-spiky", category: .hair, displayName: "Spiky", price: 40),
+    ]
+
+    static let faceMarks: [CosmeticItem] = [
+        .init(id: "face-none", category: .faceMark, displayName: "None", price: 0),
+        .init(id: "face-freckles", category: .faceMark, displayName: "Freckles", price: 0),
+        .init(id: "face-mustache", category: .faceMark, displayName: "Mustache", price: 40),
+        .init(id: "face-monocle", category: .faceMark, displayName: "Monocle", price: 50),
+    ]
+
+    static let headShapes: [CosmeticItem] = [
+        .init(id: "shape-round", category: .headShape, displayName: "Round", price: 0),
+        .init(id: "shape-square", category: .headShape, displayName: "Boxy", price: 45),
+        .init(id: "shape-star", category: .headShape, displayName: "Star", price: 60),
     ]
 
     // MARK: My Garage car (distinct from Our Ride's shared vehicle)
@@ -61,18 +99,22 @@ enum CosmeticCatalog {
         .init(id: "car-lime", category: .carColor, displayName: "Lime Green", price: 0),
         .init(id: "car-sunshine", category: .carColor, displayName: "Sunshine Yellow", price: 35),
         .init(id: "car-grape", category: .carColor, displayName: "Grape Purple", price: 55),
+        .init(id: "car-sky", category: .carColor, displayName: "Sky Blue", price: 35),
+        .init(id: "car-tangerine", category: .carColor, displayName: "Tangerine", price: 40),
     ]
 
     static let carDecals: [CosmeticItem] = [
         .init(id: "decal-none", category: .carDecal, displayName: "No Decal", price: 0),
         .init(id: "decal-flames", category: .carDecal, displayName: "Flames", price: 0),
         .init(id: "decal-stars", category: .carDecal, displayName: "Stars", price: 45),
+        .init(id: "decal-racing-stripe", category: .carDecal, displayName: "Racing Stripe", price: 35),
     ]
 
     static let carAccessories: [CosmeticItem] = [
         .init(id: "cartop-none", category: .carAccessory, displayName: "Bare Roof", price: 0),
         .init(id: "cartop-surfboard", category: .carAccessory, displayName: "Surfboard", price: 0),
         .init(id: "cartop-antenna", category: .carAccessory, displayName: "Antenna Flag", price: 45),
+        .init(id: "cartop-luggage", category: .carAccessory, displayName: "Luggage Box", price: 50),
     ]
 
     static func item(_ id: String, in items: [CosmeticItem]) -> CosmeticItem {
@@ -88,12 +130,21 @@ final class AvatarLoadout {
     var hatID: String
     var accessoryID: String
     var stickerID: String
+    /// Every new stored property here defaults on init so an existing
+    /// on-disk row (from before this category existed) still loads fine —
+    /// SwiftData's lightweight migration just adds the column.
+    var hairID: String = "hair-none"
+    var faceMarkID: String = "face-none"
+    var headShapeID: String = "shape-round"
 
     init(playerID: UUID) {
         self.playerID = playerID
         self.hatID = "hat-none"
         self.accessoryID = "acc-none"
         self.stickerID = "sticker-none"
+        self.hairID = "hair-none"
+        self.faceMarkID = "face-none"
+        self.headShapeID = "shape-round"
     }
 }
 
