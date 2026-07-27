@@ -1042,6 +1042,80 @@ struct ProgressStoreTests {
     }
 }
 
+/// Genre selection routing to real question content, exercised through the
+/// actual production wiring (`AppModel.wireParty`'s `dealDeck` closure ->
+/// `QuestionDeck.deal`), not a test-mocked `dealDeck` like every other
+/// PartySession test in this file uses. That mocking is exactly why a
+/// wiring-layer regression here could go undetected by the rest of the
+/// suite: `QuestionDeck.deal` itself was already covered and correct, but
+/// nothing exercised the closure that actually resolves *which* genre gets
+/// passed to it in a real hosted party.
+@MainActor
+struct GenreRoutingTests {
+    /// Every real genre's picked slug reaches the real dealt deck, for
+    /// every one of the 12 bundled genres, driven through `AppModel.hostParty`
+    /// exactly as Create Game does — not a shortcut around it.
+    @Test func everyGenreDealsItsOwnContentThroughTheRealHostFlow() throws {
+        let expectedPrefix: [String: String] = [
+            "riddle-realm": "riddle-",
+            "would-you-rather": "wyr-",
+            "movie-quote-mashup": "mqm-",
+            "globe-trotter-clues": "gtc-",
+            "mythical-creatures-legends": "myth-",
+            "random-acts-of-weird-facts": "weird-",
+            "superlative-showdown": "super-",
+            "time-machine": "time-",
+            "pop-culture-time-capsule": "pop-",
+            "animal-sounds-safari": "animalSoundsSafari-",
+            "sound-fx-guess": "soundFXGuess-",
+            "name-that-tune": "nameThatTune-",
+        ]
+        #expect(expectedPrefix.count == ContentCatalog.bundledGenres.count,
+                "every bundled genre needs a prefix mapping here or this test isn't the full scan it claims to be")
+
+        for genre in ContentCatalog.bundledGenres {
+            let prefix = try #require(expectedPrefix[genre.slug])
+            let container = try ModelContainer(for: Player.self,
+                                               configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            let engine = GameEngine(context: container.mainContext)
+            let profile = LocalProfile(defaults: UserDefaults(suiteName: "genre-routing-test-\(UUID())")!)
+            let progressContainer = try ModelContainer(
+                for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
+                configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+            let progress = ProgressStore(context: progressContainer.mainContext, playerID: profile.playerID)
+            let party = PartySession()
+            party.suppressesNetworking = true
+            party.revealDuration = .zero
+            let app = AppModel(engine: engine, profile: profile, catalog: ContentCatalog(),
+                               party: party, progress: progress)
+
+            let config = PartyConfig(modeSlug: "three-strikes", modeName: "Three Strikes",
+                                     genreSlug: genre.slug, genreName: genre.displayName,
+                                     difficulty: .familyMix, minPlayers: 1)
+            app.hostParty(partyName: "Genre Check", code: "1234", config: config)
+            party.startRide()
+            // Exercise the exact call the real "Start the Trip" button makes
+            // (GameEngine.startGame(), no arguments) rather than reaching
+            // into PartySession directly — that's the call site the bug
+            // report named, so this needs to prove *that* path is sound,
+            // including that `engine.playContext` is really `.partyHost` by
+            // the time a real host taps the button (it's set synchronously
+            // by `applyPartyState` off `host()`'s own `commit()`, before
+            // `hostParty()` even returns, so there's no race to worry about
+            // in practice — but assert it directly since that's the crux).
+            #expect(engine.playContext == .partyHost)
+            engine.startGame()
+
+            let dealt = try #require(party.state?.round?.questions)
+            #expect(!dealt.isEmpty, "\(genre.slug): dealt deck should not be empty")
+            #expect(dealt.allSatisfy { $0.id.hasPrefix(prefix) },
+                    "\(genre.slug): expected every question id to start with '\(prefix)' but got \(dealt.map(\.id))")
+            #expect(engine.activeGenreSlug == genre.slug,
+                    "\(genre.slug): GameEngine's synced activeGenreSlug should match the picked genre")
+        }
+    }
+}
+
 /// Nav-prompt audio pausing (Part E follow-up): built against
 /// `AVAudioSession.interruptionNotification`, the real signal iOS delivers
 /// to every app — Maps/Waze included — when another app takes the audio

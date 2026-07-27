@@ -157,7 +157,10 @@ struct CreateGameFlow: View {
         HStack(spacing: 8) {
             StickerChip(text: selectedMode?.displayName.uppercased() ?? "",
                         fill: TT.tangerine, textColor: .white, textSize: 10)
-            StickerChip(text: selectedGenre?.displayName.uppercased() ?? "",
+            // Shuffle Genres (Settings) rerolls the genre when the trip
+            // actually deals — showing the genre picked here would be
+            // misleading about what's actually about to play.
+            StickerChip(text: app.profile.shuffleGenres ? "SHUFFLED EACH GAME" : selectedGenre?.displayName.uppercased() ?? "",
                         fill: TT.grape, textColor: .white, textSize: 10)
             StickerChip(text: selectedDifficulty?.displayName.uppercased() ?? "",
                         fill: TT.lime, textColor: .white, textSize: 10)

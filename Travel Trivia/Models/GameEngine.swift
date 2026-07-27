@@ -195,6 +195,17 @@ final class GameEngine {
 
     // MARK: - Round lifecycle
 
+    /// The `pack`/`genreSlug`/`genreName` defaults here only ever apply to
+    /// the `.practice` single-device debug slice (Riddle Realm, matching
+    /// its session-1 origins) — real party games never reach this fallback:
+    /// `playContext == .partyHost` returns immediately above, delegating to
+    /// `PartySession.startTrip()`, which deals via `AppModel.wireParty`'s
+    /// `dealDeck` closure using the genre actually picked in Create Game
+    /// (see `GenreRoutingTests.everyGenreDealsItsOwnContentThroughTheRealHostFlow`,
+    /// which exercises this exact call site end to end for all 12 genres).
+    /// There is currently no UI path from Create Game into `.practice`, so
+    /// these defaults can't discard a real player's genre pick — confirmed
+    /// during the 2026-07 genre-content-routing investigation.
     func startGame(seed: UInt64? = nil, pack: [TriviaQuestion] = SeedQuestions.riddleRealm,
                    genreSlug: String = "riddle-realm", genreName: String = "Riddle Realm") {
         if playContext == .partyHost {

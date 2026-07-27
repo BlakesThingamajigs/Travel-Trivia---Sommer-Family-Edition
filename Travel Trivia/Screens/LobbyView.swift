@@ -83,7 +83,10 @@ struct LobbyView: View {
         HStack(spacing: 8) {
             StickerChip(text: state.config.modeName.uppercased(),
                         fill: TT.tangerine, textColor: .white, textSize: 10)
-            StickerChip(text: state.config.genreName.uppercased(),
+            // Shuffle Genres (Settings) rerolls the genre when the trip
+            // actually deals, so showing the picked genre here would be
+            // misleading — the picked genre is not what's about to play.
+            StickerChip(text: app.profile.shuffleGenres ? "SHUFFLED EACH GAME" : state.config.genreName.uppercased(),
                         fill: TT.grape, textColor: .white, textSize: 10)
             StickerChip(text: state.config.difficulty.displayName.uppercased(),
                         fill: TT.lime, textColor: .white, textSize: 10)
