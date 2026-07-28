@@ -95,14 +95,28 @@ struct GameEngineTests {
         #expect(engine.phase == .playing)
     }
 
-    @Test func lastPlayerStandingWinsImmediately() async throws {
+    /// The round-length floor keeps sudden death from ending a round after
+    /// just a couple of quick strike-outs: the lone survivor keeps playing
+    /// solo against the deck until `RoundLength.minQuestionsBeforeSuddenDeath`
+    /// questions have been asked.
+    @Test func lastPlayerStandingKeepsPlayingSoloUntilTheRoundLengthFloor() async throws {
         let harness = try EngineHarness()
         let engine = harness.engine
         engine.botRoll = { 0.99 }  // both bots miss every question
         engine.startGame(seed: 7)
 
-        // Bots have 3 strikes each after 3 questions; user stays alive
+        // Bots have 3 strikes each after 3 questions, but the round isn't
+        // over yet — the user is the lone survivor and keeps playing.
         for _ in 0..<3 {
+            let question = try #require(engine.currentQuestion)
+            engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
+            await engine.waitForPendingAdvance()
+        }
+        #expect(engine.phase == .playing)
+        #expect(engine.questionIndex == 3)
+
+        // Keep answering solo until the floor is reached.
+        while engine.phase == .playing {
             let question = try #require(engine.currentQuestion)
             engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
             await engine.waitForPendingAdvance()
@@ -110,7 +124,8 @@ struct GameEngineTests {
 
         #expect(engine.phase == .victory)
         #expect(engine.winner?.isUser == true)
-        #expect(engine.winner?.score == 3)
+        #expect(engine.winner?.score == RoundLength.minQuestionsBeforeSuddenDeath)
+        #expect(engine.questionIndex == RoundLength.minQuestionsBeforeSuddenDeath - 1)
     }
 
     @Test func exhaustingAllQuestionsCrownsHighestScorer() async throws {
@@ -1213,9 +1228,11 @@ struct ProgressStoreTests {
         let progress = ProgressStore(context: progressContainer.mainContext, playerID: UUID())
         engine.progress = progress
 
-        engine.botRoll = { 0.99 }  // both bots miss every question, user wins fast
+        engine.botRoll = { 0.99 }  // both bots miss every question, user is the lone survivor
         engine.startGame(seed: 7)
-        for _ in 0..<3 {
+        // The round-length floor keeps this from ending right after the
+        // bots strike out — the user plays solo to the floor.
+        while engine.phase == .playing {
             let question = try #require(engine.currentQuestion)
             engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
             await engine.waitForPendingAdvance()
@@ -1368,5 +1385,227 @@ struct AudioDirectorInterruptionTests {
             userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue])
         try await Task.sleep(for: .milliseconds(50))
         #expect(director.isInterrupted == false)
+    }
+}
+
+/// The round-length floor (`RoundLength.minQuestionsBeforeSuddenDeath`):
+/// sudden death can't end a real party round before that many questions
+/// have been asked, even in Elimination Bracket where one wrong answer
+/// normally eliminates outright.
+@MainActor
+struct RoundLengthFloorTests {
+    let session = PartySession()
+    let hostID = UUID()
+    let riderID = UUID()
+
+    private func startParty(deck: [TriviaQuestion]) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let config = PartyConfig(modeSlug: Elimination.bracketModeSlug, modeName: "Elimination Bracket",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 2)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.startRide()
+        session.startTrip()
+    }
+
+    @Test func soleSurvivorKeepsPlayingSoloUntilTheFloorEvenInEliminationBracket() async throws {
+        // A deck comfortably longer than the floor.
+        startParty(deck: SeedQuestions.movieQuoteMashup)
+        let deck = try #require(session.state?.round?.questions)
+
+        // Rider misses the very first question — one strike is enough to be
+        // out in Elimination Bracket — but the round must not end yet.
+        let q0Correct = try #require(deck[0].correctOptionID)
+        let q0Wrong = try #require(deck[0].options.first { $0.id != q0Correct })
+        session.submitLocalAnswer(optionID: q0Correct)
+        session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: q0Wrong.id))
+        await session.debugWaitForAdvance()
+
+        #expect(session.state?.player(riderID)?.strikes == 1)
+        #expect(session.state?.phase == .playing,
+                "the host is now the lone survivor, but the round shouldn't end before the floor")
+
+        // The host keeps answering solo up to the floor.
+        while session.state?.phase == .playing {
+            let index = try #require(session.state?.round?.questionIndex)
+            let correct = try #require(deck[index].correctOptionID)
+            session.submitLocalAnswer(optionID: correct)
+            await session.debugWaitForAdvance()
+        }
+
+        #expect(session.state?.phase == .victory)
+        #expect(session.state?.round?.winnerID == hostID)
+        #expect(session.state?.player(hostID)?.score == RoundLength.minQuestionsBeforeSuddenDeath)
+    }
+}
+
+/// Victory → Play Another Round: same party/seats, cumulative scores across
+/// rounds, host picks (or keeps) the mode/genre/difficulty for the next one.
+@MainActor
+struct PlayAnotherRoundTests {
+    let session = PartySession()
+    let hostID = UUID()
+    let riderID = UUID()
+
+    private func startParty(deck: [TriviaQuestion]) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let config = PartyConfig(modeSlug: "three-strikes", modeName: "Three Strikes",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 2)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.startRide()
+        session.startTrip()
+    }
+
+    private func playToVictory(deck: [TriviaQuestion]) async {
+        for question in deck {
+            guard session.state?.phase == .playing else { break }
+            let correct = question.correctOptionID ?? question.options[0].id
+            session.submitLocalAnswer(optionID: correct)
+            session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: correct))
+            await session.debugWaitForAdvance()
+        }
+    }
+
+    @Test func scoresCarryOverCumulativelyAcrossTwoRounds() async throws {
+        let deck = Array(SeedQuestions.movieQuoteMashup.prefix(3))
+        startParty(deck: deck)
+        await playToVictory(deck: deck)
+
+        #expect(session.state?.phase == .victory)
+        let scoreAfterRoundOne = try #require(session.state?.player(hostID)?.score)
+        #expect(scoreAfterRoundOne == deck.count)
+
+        let sameConfig = try #require(session.state?.config)
+        session.playAnotherRound(config: sameConfig)
+
+        #expect(session.state?.phase == .playing)
+        #expect(session.state?.round?.questionIndex == 0)
+        // Cumulative, not reset: round 2 starts from round 1's score.
+        #expect(session.state?.player(hostID)?.score == scoreAfterRoundOne)
+        #expect(session.state?.player(hostID)?.strikes == 0)
+        // Same seats by default — nobody got bumped or reshuffled.
+        #expect(session.state?.player(hostID)?.seatIndex == 0)
+        #expect(session.state?.player(riderID)?.seatIndex == 1)
+
+        await playToVictory(deck: deck)
+        #expect(session.state?.phase == .victory)
+        #expect(session.state?.player(hostID)?.score == scoreAfterRoundOne + deck.count)
+    }
+
+    @Test func hostCanPickADifferentModeAndGenreForTheNextRound() async throws {
+        let deck = Array(SeedQuestions.movieQuoteMashup.prefix(3))
+        startParty(deck: deck)
+        await playToVictory(deck: deck)
+
+        let riddles = SeedQuestions.riddleRealm
+        session.dealDeck = { _ in (riddles, "riddle-realm", "Riddle Realm") }
+        let newConfig = PartyConfig(modeSlug: HerdReveal.modeSlug, modeName: "Herd Reveal",
+                                    genreSlug: "riddle-realm", genreName: "Riddle Realm",
+                                    difficulty: .familyMix, minPlayers: 2)
+        session.playAnotherRound(config: newConfig)
+
+        #expect(session.state?.phase == .playing)
+        #expect(session.state?.config.modeSlug == HerdReveal.modeSlug)
+        #expect(session.state?.round?.genreSlug == "riddle-realm")
+        #expect(session.state?.round?.questions.first?.id == riddles.first?.id)
+    }
+}
+
+/// Host-only Pause & Reshuffle Seats: available only in the gap between
+/// questions, freezes the round without touching scores/strikes, and
+/// resumes at the exact question that would have played next.
+@MainActor
+struct PauseAndReshuffleSeatsTests {
+    let session = PartySession()
+    let hostID = UUID()
+    let riderID = UUID()
+
+    private func startParty(deck: [TriviaQuestion]) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let config = PartyConfig(modeSlug: "three-strikes", modeName: "Three Strikes",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 2)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.requestSeat(playerID: hostID, seatIndex: 0))
+        session.debugApplyIntent(.requestSeat(playerID: riderID, seatIndex: 1))
+        session.startRide()
+        session.startTrip()
+    }
+
+    @Test func isANoOpMidAnswerAndOnlyWorksDuringTheRevealGap() async throws {
+        startParty(deck: SeedQuestions.movieQuoteMashup)
+        // Nobody's answered yet — this is mid-question, not the reveal gap.
+        session.pauseAndReshuffleSeats()
+        #expect(session.state?.phase == .playing, "pausing mid-answer should be a no-op")
+
+        let question = try #require(session.state?.round?.questions.first)
+        let correct = try #require(question.correctOptionID)
+        session.submitLocalAnswer(optionID: correct)
+        session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: correct))
+        #expect(session.state?.round?.revealing == true)
+
+        // Now we're in the gap: the reveal is showing, the next question
+        // hasn't opened yet.
+        session.pauseAndReshuffleSeats()
+        #expect(session.state?.phase == .ride)
+        #expect(session.state?.round == nil, "the round moves into pausedRound, not round")
+    }
+
+    @Test func resumeContinuesFromTheExactNextQuestionWithNoScoreChange() async throws {
+        startParty(deck: SeedQuestions.movieQuoteMashup)
+        let deck = try #require(session.state?.round?.questions)
+        let q0Correct = try #require(deck[0].correctOptionID)
+        session.submitLocalAnswer(optionID: q0Correct)
+        session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: q0Correct))
+        #expect(session.state?.round?.revealing == true)
+
+        let scoreBeforePause = session.state?.player(hostID)?.score
+        session.pauseAndReshuffleSeats()
+        #expect(session.state?.phase == .ride)
+
+        // Move to fresh seats while paused — score/strikes stay put. (A
+        // straight two-way swap needs a vacating step first since a seat
+        // claim is rejected while still occupied; moving to two other free
+        // seats exercises the same "seats changed during the pause" path
+        // without that pre-existing seat-claim wrinkle.)
+        session.debugApplyIntent(.requestSeat(playerID: hostID, seatIndex: 2))
+        session.debugApplyIntent(.requestSeat(playerID: riderID, seatIndex: 3))
+        #expect(session.state?.player(hostID)?.score == scoreBeforePause)
+
+        session.resumeFromPause()
+
+        // The next question served matches what would have played next
+        // before the pause: question index 1, not a repeat of question 0.
+        #expect(session.state?.phase == .playing)
+        #expect(session.state?.round?.questionIndex == 1)
+        #expect(session.state?.round?.revealing == false)
+        #expect(session.state?.pausedRound == nil)
+        #expect(session.state?.player(hostID)?.score == scoreBeforePause,
+                "resuming shouldn't itself change anyone's score")
+        #expect(session.state?.player(hostID)?.seatIndex == 2)
+        #expect(session.state?.player(riderID)?.seatIndex == 3)
+
+        // Play continues normally from here.
+        let q1Correct = try #require(deck[1].correctOptionID)
+        session.submitLocalAnswer(optionID: q1Correct)
+        session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: q1Correct))
+        #expect(session.state?.round?.revealing == true)
+        #expect(session.state?.player(hostID)?.score == (scoreBeforePause ?? 0) + 1)
     }
 }

@@ -35,6 +35,21 @@ struct ScoreboardDropdown: View {
             ForEach(standings, id: \.persistentModelID) { player in
                 ScoreboardRow(player: player)
             }
+            // Host-only, and only tappable in the gap between questions
+            // (once the reveal is showing) — not mid-answer, so nobody's
+            // turn gets interrupted.
+            if engine.playContext == .partyHost {
+                Button {
+                    engine.pauseAndReshuffleSeats()
+                } label: {
+                    StickerChip(text: "PAUSE & RESHUFFLE SEATS", fill: TT.skyDeep,
+                                textColor: .white, textSize: 11)
+                }
+                .buttonStyle(.bubble)
+                .accessibilityIdentifier("pause-reshuffle-seats")
+                .disabled(engine.turnState != .revealing)
+                .opacity(engine.turnState == .revealing ? 1 : 0.4)
+            }
             // Real party games only — practice has no roster to leave and
             // no networking to hand off.
             if engine.playContext != .practice {

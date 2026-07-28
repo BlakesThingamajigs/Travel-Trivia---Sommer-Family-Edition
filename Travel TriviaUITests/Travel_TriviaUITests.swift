@@ -324,6 +324,56 @@ final class Travel_TriviaUITests: XCTestCase {
                       "Leaving mid-game should land back on the Main Menu")
     }
 
+    /// Host-only Pause & Reshuffle Seats, driven for real (not just the
+    /// headless PartySession tests): submit an answer so the reveal opens
+    /// (the only gap the control is live in), pause, confirm the round
+    /// drops back to a distinctly-labeled seat picker with the Resume
+    /// control, then resume and confirm play continues normally.
+    @MainActor
+    func testPauseAndReshuffleSeatsRoundTripsBackIntoTheSameRound() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTSkipWelcome"]
+        app.launch()
+
+        app.buttons["menu-create"].tap()
+        app.buttons["mode-three-strikes"].tap()
+        app.buttons["genre-riddle-realm"].tap()
+        app.buttons["difficulty-family-mix"].tap()
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText("Pause Test Party")
+        app.buttons["create-party"].tap()
+
+        XCTAssertTrue(app.buttons["lobby-start"].waitForExistence(timeout: 8))
+        app.buttons["lobby-start"].tap()
+        let startAnyway = app.alerts.buttons["Start Anyway"]
+        if startAnyway.waitForExistence(timeout: 3) { startAnyway.tap() }
+
+        XCTAssertTrue(app.buttons["start-trip"].waitForExistence(timeout: 5))
+        app.buttons["start-trip"].tap()
+
+        XCTAssertTrue(app.buttons["answer-0"].waitForExistence(timeout: 5))
+        app.buttons["answer-0"].tap()   // solo host: the reveal opens immediately
+
+        app.buttons["scoreboard-toggle"].tap()
+        let pauseButton = app.buttons["pause-reshuffle-seats"]
+        XCTAssertTrue(pauseButton.waitForExistence(timeout: 3))
+        // Only tappable during the reveal gap — this is that window.
+        XCTAssertTrue(pauseButton.isEnabled, "should be enabled while the reveal is showing")
+        pauseButton.tap()
+
+        XCTAssertTrue(app.staticTexts["paused-for-reshuffle"].waitForExistence(timeout: 3),
+                      "pausing should show the distinct pause banner, not restart or close the party")
+        let resumeButton = app.buttons["resume-round"]
+        XCTAssertTrue(resumeButton.waitForExistence(timeout: 3))
+        resumeButton.tap()
+
+        // Back in the round, on the next question, answerable as normal.
+        XCTAssertTrue(app.buttons["answer-0"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["scoreboard-toggle"].exists)
+    }
+
     /// Button-label truncation fix (RoadSignLabel + StickerChip): screenshots
     /// the difficulty picker (all 3 tiers, including the longest label,
     /// "Grown-Up Challenge") and the Create Game summary chips that echo the

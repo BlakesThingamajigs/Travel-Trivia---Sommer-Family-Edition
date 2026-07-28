@@ -301,34 +301,104 @@ final class PartySession: NSObject {
     /// Our Ride → dealing the deck and playing. Unseated riders get
     /// auto-dropped into free seats so nobody starts seatless.
     func startTrip() {
-        guard isHost, var s = state, let dealDeck else { return }
+        guard isHost, var s = state, dealDeck != nil else { return }
         advanceTask?.cancel()
         curveballTask?.cancel()
         wagerTask?.cancel()
         pendingAnswers = [:]
-
-        var takenSeats = Set(s.players.compactMap(\.seatIndex))
+        seatUnseatedRiders(&s)
         for i in s.players.indices {
-            if s.players[i].presence != .left, s.players[i].seatIndex == nil {
-                if let free = (0..<PartyWire.maxPlayers).first(where: { !takenSeats.contains($0) }) {
-                    s.players[i].seatIndex = free
-                    takenSeats.insert(free)
-                }
-            }
             s.players[i].score = 0
             s.players[i].strikes = 0
             s.players[i].lastAnswerCorrect = nil
             s.players[i].pendingWager = nil
         }
+        dealNewRound(&s, config: s.config)
+        commit(s)
+        holdIfNobodyCanAnswer()
+    }
 
-        let dealt = dealDeck(s.config)
+    /// Victory → Play Another Round: same party, same seats/roles by default
+    /// (a rider who joined during Victory still gets auto-seated, same as a
+    /// trip's first deal) — scores carry over cumulatively across rounds in
+    /// the same party, only strikes and the deck reset.
+    func playAnotherRound(config: PartyConfig) {
+        guard isHost, var s = state, s.phase == .victory, dealDeck != nil else { return }
+        advanceTask?.cancel()
+        curveballTask?.cancel()
+        wagerTask?.cancel()
+        pendingAnswers = [:]
+        seatUnseatedRiders(&s)
+        for i in s.players.indices {
+            s.players[i].strikes = 0
+            s.players[i].lastAnswerCorrect = nil
+            s.players[i].pendingWager = nil
+            // Score intentionally left as-is — a running total, not reset.
+        }
+        dealNewRound(&s, config: config)
+        commit(s)
+        holdIfNobodyCanAnswer()
+    }
+
+    /// Auto-drops any unseated-but-not-left rider into a free seat, so
+    /// nobody starts a round seatless — used both for a trip's first deal
+    /// and for Play Another Round (a fresh joiner mid-Victory has no seat
+    /// yet either).
+    private func seatUnseatedRiders(_ s: inout PartyState) {
+        var takenSeats = Set(s.players.compactMap(\.seatIndex))
+        for i in s.players.indices
+        where s.players[i].presence != .left && s.players[i].seatIndex == nil {
+            if let free = (0..<PartyWire.maxPlayers).first(where: { !takenSeats.contains($0) }) {
+                s.players[i].seatIndex = free
+                takenSeats.insert(free)
+            }
+        }
+    }
+
+    /// Deals a fresh deck for `config` into `s.round` and (re)initializes
+    /// Team Relay's turn order — the shared back half of both `startTrip`
+    /// and `playAnotherRound`.
+    private func dealNewRound(_ s: inout PartyState, config: PartyConfig) {
+        guard let dealDeck else { return }
+        s.config = config
+        let dealt = dealDeck(config)
         s.round = RoundState(questions: dealt.deck,
                              genreSlug: dealt.genreSlug,
                              genreName: dealt.genreName)
         s.phase = .playing
-        if s.config.modeSlug == TeamRelay.modeSlug {
+        if config.modeSlug == TeamRelay.modeSlug {
             initializeTeamRelayTurns(&s)
         }
+    }
+
+    /// Host-only, and only in the gap between questions (the current
+    /// question's reveal is showing, the next one hasn't opened yet — never
+    /// mid-answer): freezes the round and drops back to the seat picker so
+    /// riders can swap seats/roles. Scores, strikes, and the dealt deck are
+    /// untouched — this is a pause, not a restart.
+    func pauseAndReshuffleSeats() {
+        guard isHost, var s = state, s.phase == .playing, s.round?.revealing == true else { return }
+        advanceTask?.cancel()
+        curveballTask?.cancel()
+        wagerTask?.cancel()
+        s.pausedRound = s.round
+        s.round = nil
+        s.phase = .ride
+        commit(s)
+    }
+
+    /// Host-only: leaves the seat picker after a pause and continues the
+    /// round from the exact question that would have played next — same
+    /// deck, same order, no re-score of the question that was already
+    /// resolved when the pause happened.
+    func resumeFromPause() {
+        guard isHost, var s = state, s.phase == .ride, var round = s.pausedRound else { return }
+        round.revealing = false
+        round.resolvedCorrectOptionID = nil
+        s.round = round
+        s.pausedRound = nil
+        s.phase = .playing
+        progressRoundOrFinish(&s)
         commit(s)
         holdIfNobodyCanAnswer()
     }
@@ -610,13 +680,22 @@ final class PartySession: NSObject {
     }
 
     private func advance() {
-        guard var s = state, s.phase == .playing, let round = s.round else { return }
+        guard var s = state, s.phase == .playing, s.round != nil else { return }
         for i in s.players.indices {
             s.players[i].lastAnswerCorrect = nil
         }
         s.round?.revealing = false
         s.round?.resolvedCorrectOptionID = nil
+        progressRoundOrFinish(&s)
+        commit(s)
+        holdIfNobodyCanAnswer()
+    }
 
+    /// Shared by the normal post-reveal `advance()` and by resuming from a
+    /// Pause & Reshuffle Seats — either moves to the next question or ends
+    /// the round, without touching anyone's score.
+    private func progressRoundOrFinish(_ s: inout PartyState) {
+        guard let round = s.round else { return }
         let threshold = Elimination.maxStrikes(modeSlug: s.config.modeSlug)
         let alive = s.players.filter { $0.strikes < threshold && $0.presence != .left }
         let deckExhausted = round.questionIndex + 1 >= round.questions.count
@@ -624,8 +703,12 @@ final class PartySession: NSObject {
         // more than one player — a solo-hosted party (no other riders ever
         // joined) starts at 1 player, which would trivially satisfy
         // `alive.count <= 1` after the very first question in every mode,
-        // not just Elimination Bracket.
+        // not just Elimination Bracket. It's also gated behind the
+        // round-length floor: a lone survivor keeps playing solo against the
+        // remaining deck rather than ending the round in a handful of
+        // questions.
         let suddenDeath = alive.count <= 1 && s.players.count > 1
+            && round.questionIndex >= RoundLength.minQuestionsBeforeSuddenDeath - 1
         if suddenDeath || deckExhausted {
             finishRound(&s)
         } else {
@@ -634,8 +717,6 @@ final class PartySession: NSObject {
             beginCurveballPreviewIfDue(&s)
             beginWagerWindowIfDue(&s)
         }
-        commit(s)
-        holdIfNobodyCanAnswer()
     }
 
     // MARK: - Copilot's Curveball

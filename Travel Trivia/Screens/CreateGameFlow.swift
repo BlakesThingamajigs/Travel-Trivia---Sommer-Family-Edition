@@ -180,7 +180,7 @@ struct CreateGameFlow: View {
 
 // MARK: - Cards
 
-private struct ModeCard: View {
+struct ModeCard: View {
     var mode: GameMode
     var select: () -> Void
 
@@ -234,7 +234,7 @@ private struct ModeCard: View {
     }
 }
 
-private struct GenreCard: View {
+struct GenreCard: View {
     var genre: TriviaGenre
     var select: () -> Void
 
@@ -272,7 +272,7 @@ private struct GenreCard: View {
     }
 }
 
-private struct DifficultyCard: View {
+struct DifficultyCard: View {
     var tier: DifficultyTier
     var select: () -> Void
 

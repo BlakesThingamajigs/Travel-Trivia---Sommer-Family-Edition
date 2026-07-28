@@ -25,6 +25,12 @@ struct OurRideView: View {
                 .zIndex(1)
             StickerChip(text: "Pick your seats, gang!", textSize: 14)
 
+            if engine.isPausedForReshuffle {
+                StickerChip(text: "ROUND PAUSED — SWAP SEATS, THEN RESUME",
+                            fill: TT.tangerine, textColor: .white, textSize: 11)
+                    .accessibilityIdentifier("paused-for-reshuffle")
+            }
+
             Spacer(minLength: 12)
 
             CarTopDownView()
@@ -68,7 +74,22 @@ struct OurRideView: View {
 
     @ViewBuilder
     private var footer: some View {
-        if engine.canControlFlow {
+        if engine.isPausedForReshuffle {
+            if engine.canControlFlow {
+                Button {
+                    engine.resumeFromPause()
+                } label: {
+                    RoadSignLabel(title: "Resume the Round")
+                }
+                .buttonStyle(.bubble)
+                .accessibilityIdentifier("resume-round")
+            } else {
+                StickerChip(text: "THE HOST WILL RESUME THE ROUND…",
+                            fill: TT.sunshine, textSize: 12)
+                    .padding(.vertical, 12)
+                    .accessibilityIdentifier("ride-waiting")
+            }
+        } else if engine.canControlFlow {
             Button {
                 engine.startGame()
             } label: {

@@ -14,8 +14,22 @@ struct VictoryView: View {
     @Environment(GameEngine.self) private var engine
     @Environment(AppModel.self) private var app
     @State private var confettiTick = 0
+    @State private var showRoundPicker = false
 
     var body: some View {
+        if showRoundPicker, let config = app.party.state?.config {
+            PlayAnotherRoundPicker(currentConfig: config, onStart: { newConfig in
+                engine.playAnotherRound(config: newConfig)
+                showRoundPicker = false
+            }, onCancel: {
+                showRoundPicker = false
+            })
+        } else {
+            celebration
+        }
+    }
+
+    private var celebration: some View {
         VStack(spacing: 16) {
             Spacer()
             StickerText(text: "WINNER!", size: 52)
@@ -42,7 +56,7 @@ struct VictoryView: View {
 
             Spacer()
 
-            if engine.canControlFlow {
+            if engine.playContext == .practice {
                 Button {
                     engine.backToRide()
                 } label: {
@@ -50,6 +64,26 @@ struct VictoryView: View {
                 }
                 .buttonStyle(.bubble)
                 .accessibilityIdentifier("back-to-ride")
+                .padding(.bottom, 20)
+            } else if engine.playContext == .partyHost {
+                VStack(spacing: 10) {
+                    Button {
+                        showRoundPicker = true
+                    } label: {
+                        RoadSignLabel(title: "Play Another Round", color: TT.skyDeep)
+                    }
+                    .buttonStyle(.bubble)
+                    .accessibilityIdentifier("play-another-round")
+
+                    Button {
+                        app.leaveParty()
+                    } label: {
+                        StickerChip(text: "END THE PARTY", fill: TT.cherry,
+                                    textColor: .white, textSize: 12)
+                    }
+                    .buttonStyle(.bubble)
+                    .accessibilityIdentifier("end-the-party")
+                }
                 .padding(.bottom, 20)
             } else {
                 StickerChip(text: "THE HOST PICKS THE NEXT STOP…",

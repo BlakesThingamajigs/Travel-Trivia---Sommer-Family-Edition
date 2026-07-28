@@ -148,6 +148,17 @@ nonisolated enum TeamRelay {
     static let modeSlug = "team-relay"
 }
 
+/// Round-length floor: sudden death (one player left standing) shouldn't be
+/// able to end a round after just a couple of quick strike-outs, now that
+/// dealt decks routinely run 26-70+ questions. A solo survivor keeps
+/// answering against the deck (everyone else already eliminated sits out)
+/// until this many questions have been asked, or the deck runs out —
+/// whichever comes first. Applies to every mode, not just Elimination
+/// Bracket, since every mode shares the same `advance()` sudden-death check.
+nonisolated enum RoundLength {
+    static let minQuestionsBeforeSuddenDeath = 15
+}
+
 /// Herd Reveal rules: any genre's normally-authored questions, scored by
 /// whichever answer won the car's vote instead of the authored answer.
 nonisolated enum HerdReveal {
@@ -209,6 +220,12 @@ nonisolated struct PartyState: Codable, Equatable, Sendable {
     var phase: PartyPhase = .lobby
     var players: [PartyPlayerState] = []
     var round: RoundState?
+    /// Host-only "Pause & Reshuffle Seats": the in-flight round, frozen here
+    /// while `phase` drops back to `.ride` for reseating. Non-nil exactly
+    /// when the car is mid-pause rather than starting a fresh game — lets
+    /// every screen tell the two `.ride` phases apart. Resuming restores
+    /// `round` from this and clears it.
+    var pausedRound: RoundState?
 
     func player(_ id: UUID) -> PartyPlayerState? {
         players.first { $0.id == id }

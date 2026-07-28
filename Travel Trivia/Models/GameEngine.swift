@@ -69,6 +69,10 @@ final class GameEngine {
     private(set) var userSubmittedWager: Int?
     /// Team Relay: whose turn it is to answer for each squad (index 0/1).
     private(set) var teamTurnPlayerIDs: [UUID?] = [nil, nil]
+    /// Host's "Pause & Reshuffle Seats": true while `.ride` is showing
+    /// because the host paused mid-round (not because a fresh game is
+    /// starting) — the round itself is frozen, not restarted.
+    private(set) var isPausedForReshuffle = false
 
     /// Increment-to-fire animation triggers observed by the screens.
     private(set) var confettiTrigger = 0
@@ -244,6 +248,28 @@ final class GameEngine {
         phase = .ride
     }
 
+    /// Victory → Play Another Round: same party, same seats/roles, scores
+    /// carry over cumulatively — only strikes and the deck reset.
+    func playAnotherRound(config: PartyConfig) {
+        guard playContext == .partyHost else { return }
+        party?.playAnotherRound(config: config)
+    }
+
+    /// Host-only, between questions (once the reveal is showing, before the
+    /// next question opens): freeze the round and return to the seat picker
+    /// so riders can swap seats without losing score/strikes.
+    func pauseAndReshuffleSeats() {
+        guard playContext == .partyHost else { return }
+        party?.pauseAndReshuffleSeats()
+    }
+
+    /// Host-only: leave the seat picker and continue the paused round from
+    /// the exact next question, same deck, same order.
+    func resumeFromPause() {
+        guard playContext == .partyHost else { return }
+        party?.resumeFromPause()
+    }
+
     /// The user taps an answer.
     func submitUserAnswer(optionID: String) {
         guard phase == .playing,
@@ -347,7 +373,12 @@ final class GameEngine {
         // more than one player — a solo-hosted practice round starts at 1
         // player and no bots, which would trivially satisfy this after the
         // very first question in every mode, not just Elimination Bracket.
+        // It's also gated behind the round-length floor: a lone survivor
+        // keeps playing solo against the remaining deck (everyone else
+        // eliminated sits out) rather than ending the round in a handful of
+        // questions.
         let suddenDeath = alivePlayers.count <= 1 && players.count > 1
+            && questionIndex >= RoundLength.minQuestionsBeforeSuddenDeath - 1
         let roundOver = suddenDeath || questionIndex + 1 >= questions.count
         if roundOver {
             finishRound()
@@ -467,6 +498,7 @@ final class GameEngine {
         userSubmittedWager = nil
         teamTurnPlayerIDs = [nil, nil]
         localWasAloneInLast = false
+        isPausedForReshuffle = false
         phase = .ride
     }
 
@@ -478,6 +510,7 @@ final class GameEngine {
 
         syncPlayers(from: state)
 
+        isPausedForReshuffle = state.pausedRound != nil
         activeModeSlug = state.config.modeSlug
         activeDifficulty = state.config.difficulty
         let round = state.round
