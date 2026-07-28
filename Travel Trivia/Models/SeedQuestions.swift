@@ -101,8 +101,8 @@ nonisolated enum SeedQuestions {
             // MARK: Round 2 additions (17–46)
             question(17, .easy, "I have keys but no locks. I have space but no room. You can enter, but you can't go outside. What am I?",
                      ["A keyboard", "A house", "A piano", "A safe", "A map", "A closet"]),
-            question(18, .medium, "The more you take, the more you leave behind. What am I?",
-                     ["Footsteps", "Time", "Memories", "Breath", "Shadows", "Sand"]),
+            question(18, .medium, "I begin with T, end with T, and I'm full of T. What am I?",
+                     ["A teapot", "A tent", "A toast", "A ticket", "A trumpet", "A turtle"]),
             question(19, .easy, "What has a neck but no head?",
                      ["A bottle", "A shirt", "A guitar", "A road", "A river", "A giraffe"]),
             question(20, .easy, "What gets wetter the more it dries?",
