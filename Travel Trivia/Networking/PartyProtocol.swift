@@ -148,6 +148,42 @@ nonisolated enum TeamRelay {
     static let modeSlug = "team-relay"
 }
 
+/// "All Aboard" bonus questions: every non-driver seat (copilot + every
+/// backseat rider) answers independently on their own device, instead of
+/// just the round's usual single/relay answerer — a deliberately flagged
+/// moment, distinct from Copilot's Curveball's early-reveal twist. The
+/// driver never gets an answer UI here either — same as every other
+/// question, just now software-enforced instead of house-rule only.
+/// Party-only: there's no real per-seat-per-device play in the practice
+/// slice for this to mean anything.
+nonisolated enum AllAboard {
+    /// Every Nth question is an All Aboard question.
+    static let cadence = 5
+    /// Bonus points added to each correct answerer's score, on top of their
+    /// normal point, if every participating (non-driver, still-in-it)
+    /// player answered correctly together — a shared "we got it!" moment,
+    /// not just more individual scoring.
+    static let groupBonus = 5
+
+    static func isAllAboardIndex(_ questionIndex: Int) -> Bool {
+        (questionIndex + 1) % cadence == 0
+    }
+
+    /// Whether the question at `questionIndex` actually runs as an All
+    /// Aboard moment for `modeSlug`. Exempts Double or Nothing's wager
+    /// questions when the two cadences coincide (every 20th question) —
+    /// stacking both would collide visually, and wager settlement's
+    /// +wager/-wager scoring doesn't map onto a flat individual-correct
+    /// group bonus, so the wager question just plays as itself.
+    static func isActive(_ questionIndex: Int, modeSlug: String) -> Bool {
+        guard isAllAboardIndex(questionIndex) else { return false }
+        if modeSlug == DoubleOrNothing.modeSlug, DoubleOrNothing.isWagerIndex(questionIndex) {
+            return false
+        }
+        return true
+    }
+}
+
 /// Round-length floor: sudden death (one player left standing) shouldn't be
 /// able to end a round after just a couple of quick strike-outs, now that
 /// dealt decks routinely run 26-70+ questions. A solo survivor keeps

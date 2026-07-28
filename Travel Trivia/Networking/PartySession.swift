@@ -578,9 +578,14 @@ final class PartySession: NSObject {
     /// Players the current question waits on: connected and still in it.
     /// Team Relay narrows this to just the two riders whose relay turn it
     /// is — everyone else's tap is a no-op (recordAnswer rejects it below).
+    /// An All Aboard question overrides all of that (turn rotation
+    /// included) with every connected, still-in-it, non-driver seat.
     private var answerGate: [UUID] {
         guard let s = state, s.phase == .playing, let round = s.round,
               !round.revealing, !round.curveballPreview, !round.wagerOpen else { return [] }
+        if AllAboard.isActive(round.questionIndex, modeSlug: s.config.modeSlug) {
+            return allAboardGate(s)
+        }
         if s.config.modeSlug == TeamRelay.modeSlug {
             return round.teamTurnPlayerID.compactMap { $0 }.filter { id in
                 s.player(id)?.presence == .connected
@@ -589,6 +594,19 @@ final class PartySession: NSObject {
         let threshold = Elimination.maxStrikes(modeSlug: s.config.modeSlug)
         return s.players
             .filter { $0.presence == .connected && $0.strikes < threshold }
+            .map(\.id)
+    }
+
+    /// All Aboard: every connected, still-in-it, non-driver seat — both
+    /// Team Relay squads at once (that question's turn rotation is paused
+    /// for the one question, not consumed; the normal rotation resumes
+    /// exactly where it left off on the next question, unaffected). Players
+    /// already eliminated (Elimination Bracket) stay full spectators, same
+    /// as any other question — not a special "for fun" participation tier.
+    private func allAboardGate(_ s: PartyState) -> [UUID] {
+        let threshold = Elimination.maxStrikes(modeSlug: s.config.modeSlug)
+        return s.players
+            .filter { $0.presence == .connected && $0.strikes < threshold && $0.role != .pilot }
             .map(\.id)
     }
 
@@ -647,6 +665,11 @@ final class PartySession: NSObject {
         // wagering isn't an elimination risk.
         let isWagerQuestion = s.config.modeSlug == DoubleOrNothing.modeSlug
             && DoubleOrNothing.isWagerIndex(round.questionIndex)
+        let isAllAboardQuestion = AllAboard.isActive(round.questionIndex, modeSlug: s.config.modeSlug)
+        // Whole-car group bonus: every participant who actually answered
+        // this All Aboard question has to be correct — starts true and
+        // gets knocked down by the first miss below.
+        var allAboardEveryoneCorrect = isAllAboardQuestion && !pendingAnswers.isEmpty
 
         for i in s.players.indices {
             guard let answer = pendingAnswers[s.players[i].id] else { continue }
@@ -661,6 +684,14 @@ final class PartySession: NSObject {
                 s.players[i].score += 1
             } else {
                 s.players[i].strikes += 1
+            }
+            if isAllAboardQuestion, !correct {
+                allAboardEveryoneCorrect = false
+            }
+        }
+        if isAllAboardQuestion, allAboardEveryoneCorrect {
+            for i in s.players.indices where pendingAnswers[s.players[i].id] != nil {
+                s.players[i].score += AllAboard.groupBonus
             }
         }
         pendingAnswers = [:]

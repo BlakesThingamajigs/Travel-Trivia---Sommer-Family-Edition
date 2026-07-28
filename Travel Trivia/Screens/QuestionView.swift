@@ -54,6 +54,13 @@ struct QuestionView: View {
             && !(engine.userPlayer?.isOut ?? true)
     }
 
+    /// All Aboard: the driver never gets an answer UI, on this question or
+    /// any other — they keep calling out color + position like normal, just
+    /// with everyone else answering independently instead of one person.
+    private var isDriverDuringAllAboard: Bool {
+        engine.currentQuestionIsAllAboard && engine.localPlayerIsDriver
+    }
+
     var body: some View {
         VStack(spacing: 10) {
             header
@@ -78,6 +85,8 @@ struct QuestionView: View {
                                 fill: TT.tangerine, textColor: .white, textSize: 12)
                         .transition(.scale.combined(with: .opacity))
                         .accessibilityIdentifier("curveball-peek")
+                } else if engine.currentQuestionIsAllAboard {
+                    AllAboardBanner()
                 }
 
                 Spacer(minLength: 8)
@@ -89,6 +98,11 @@ struct QuestionView: View {
                     StickerChip(text: "YOU'RE OUT — ENJOY THE RIDE!",
                                 fill: TT.cherry, textColor: .white, textSize: 13)
                         .transition(.scale.combined(with: .opacity))
+                } else if isDriverDuringAllAboard {
+                    StickerChip(text: "YOU'RE DRIVING — CALL OUT COLOR + POSITION!",
+                                fill: TT.tangerine, textColor: .white, textSize: 13)
+                        .transition(.scale.combined(with: .opacity))
+                        .accessibilityIdentifier("driver-call-out")
                 } else if engine.wagerWindowActive {
                     StickerChip(text: "WAGER LOCKED IN — WAITING FOR THE CAR…",
                                 fill: TT.grape, textColor: .white, textSize: 12)
@@ -105,8 +119,13 @@ struct QuestionView: View {
 
                 Spacer(minLength: 8)
 
-                AnswerGrid(question: question)
-                    .padding(.bottom, 16)
+                if isDriverDuringAllAboard {
+                    DriverCallOutCard()
+                        .padding(.bottom, 16)
+                } else {
+                    AnswerGrid(question: question)
+                        .padding(.bottom, 16)
+                }
             } else {
                 Spacer(minLength: 0)
             }
@@ -264,6 +283,56 @@ private struct CurveballCover: View {
         .sticker(RoundedRectangle(cornerRadius: 20), fill: TT.tangerine)
         .accessibilityIdentifier("curveball-cover")
         .onAppear { wobble = true }
+        .transition(.scale.combined(with: .opacity))
+    }
+}
+
+/// All Aboard's flagged-moment banner: shown once the question is actually
+/// answerable (after any Curveball preview ends) so it reads as a distinct
+/// event — every non-driver seat gets its own answer UI this time, instead
+/// of the round's usual single/relay answerer.
+private struct AllAboardBanner: View {
+    @State private var wobble = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.3.fill")
+                .font(.system(size: 15, weight: .black))
+                .rotationEffect(.degrees(wobble ? 4 : -4))
+                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: wobble)
+            Text("EVERYONE ANSWERS!")
+                .font(TT.font(14, .heavy))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .sticker(Capsule(), fill: TT.bubblegum, lineWidth: 2.5, drop: CGSize(width: 0, height: 3))
+        .accessibilityIdentifier("all-aboard-banner")
+        .onAppear { wobble = true }
+        .transition(.scale.combined(with: .opacity))
+    }
+}
+
+/// What the driver sees in place of the answer grid during an All Aboard
+/// question — they never get a tappable answer UI, on this question or any
+/// other, but this makes the "sit this one out (as a tapper)" state an
+/// explicit, visible moment instead of the answer grid just quietly
+/// vanishing.
+private struct DriverCallOutCard: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "megaphone.fill")
+                .font(.system(size: 26, weight: .black))
+                .foregroundStyle(.white)
+            Text("Everyone else is answering on their own phone.\nCall out the color + position if you know it!")
+                .font(TT.font(14, .bold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, minHeight: 110)
+        .sticker(RoundedRectangle(cornerRadius: 20), fill: TT.tangerine)
+        .accessibilityIdentifier("driver-call-out-card")
         .transition(.scale.combined(with: .opacity))
     }
 }

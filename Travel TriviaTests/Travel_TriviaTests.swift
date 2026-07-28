@@ -1121,7 +1121,12 @@ struct SixSeatPartyTests {
 
         #expect(session.state?.phase == .victory, "a full round with all 6 players should reach victory")
         let players = try #require(session.state?.players)
-        #expect(players.allSatisfy { $0.score == answered })
+        // Nobody's assigned the pilot role in this test, so all 6 qualify
+        // for every All Aboard question (every 5th) — everyone answers
+        // correctly, so the whole-car group bonus lands every time too.
+        let allAboardHits = answered / AllAboard.cadence
+        let expectedScore = answered + allAboardHits * AllAboard.groupBonus
+        #expect(players.allSatisfy { $0.score == expectedScore })
     }
 }
 
@@ -1440,7 +1445,13 @@ struct RoundLengthFloorTests {
 
         #expect(session.state?.phase == .victory)
         #expect(session.state?.round?.winnerID == hostID)
-        #expect(session.state?.player(hostID)?.score == RoundLength.minQuestionsBeforeSuddenDeath)
+        // 15 base points (one per question) plus the All Aboard group bonus
+        // on every 5th question the host (the lone remaining answerer,
+        // never assigned the pilot role in this test) gets right solo —
+        // questions 5, 10, 15 (indices 4, 9, 14) — 3 hits × groupBonus.
+        let allAboardHits = RoundLength.minQuestionsBeforeSuddenDeath / AllAboard.cadence
+        let expectedScore = RoundLength.minQuestionsBeforeSuddenDeath + allAboardHits * AllAboard.groupBonus
+        #expect(session.state?.player(hostID)?.score == expectedScore)
     }
 }
 
@@ -1607,5 +1618,328 @@ struct PauseAndReshuffleSeatsTests {
         session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: q1Correct))
         #expect(session.state?.round?.revealing == true)
         #expect(session.state?.player(hostID)?.score == (scoreBeforePause ?? 0) + 1)
+    }
+}
+
+/// "All Aboard" bonus questions (`AllAboard.cadence` = every 5th question):
+/// every non-driver seat answers independently instead of the round's usual
+/// single/relay answerer, with a whole-car group bonus on top of everyone's
+/// normal point if every participant got it right together. Covers Three
+/// Strikes (baseline mechanics + driver exclusion), Elimination Bracket
+/// (eliminated players stay full spectators), and Team Relay (both squads
+/// answer, turn rotation resumes unaffected afterward) for real against the
+/// production `PartySession` authority class.
+@MainActor
+struct AllAboardTests {
+    let session = PartySession()
+    let hostID = UUID()
+    let riderID = UUID()
+    let backseatID = UUID()
+
+    private func startParty(modeSlug: String, deck: [TriviaQuestion], minPlayers: Int = 2) {
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.curveballPreviewDuration = .zero
+        session.wagerDuration = .zero
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let config = PartyConfig(modeSlug: modeSlug, modeName: modeSlug,
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: minPlayers)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.startRide()
+        session.startTrip()
+    }
+
+    private func answer(_ playerID: UUID, _ optionID: String) {
+        if playerID == hostID {
+            session.submitLocalAnswer(optionID: optionID)
+        } else {
+            session.debugApplyIntent(.submitAnswer(playerID: playerID, optionID: optionID))
+        }
+    }
+
+    /// Plays questions `0..<count` normally (everyone answers, nothing
+    /// eliminated) so a test can fast-forward to a specific All Aboard
+    /// question — none of these indices are multiples of 5.
+    private func playNormalQuestions(deck: [TriviaQuestion], count: Int) async throws {
+        for index in 0..<count {
+            let correct = try #require(deck[index].correctOptionID)
+            answer(hostID, correct)
+            answer(riderID, correct)
+            answer(backseatID, correct)
+            await session.debugWaitForAdvance()
+        }
+    }
+
+    @Test func driverIsExcludedFromTheAnswerGateOnAnAllAboardQuestion() async throws {
+        startParty(modeSlug: "three-strikes", deck: SeedQuestions.movieQuoteMashup, minPlayers: 3)
+        session.assignRole(.pilot, to: hostID)
+        try await playNormalQuestions(deck: SeedQuestions.movieQuoteMashup, count: 4)
+
+        #expect(session.state?.round?.questionIndex == 4, "question 5 (index 4) is the first All Aboard question")
+        let deck = try #require(session.state?.round?.questions)
+        let correct = try #require(deck[4].correctOptionID)
+        let wrong = try #require(deck[4].options.first { $0.id != correct })
+
+        // The driver's tap is rejected outright — not scored, not counted.
+        answer(hostID, correct)
+        #expect(session.state?.round?.revealing != true)
+        #expect(session.state?.player(hostID)?.lastAnswerCorrect == nil)
+
+        // Rider is correct, backseat is wrong — not unanimous, so no group
+        // bonus even though the question still resolves normally.
+        answer(riderID, correct)
+        answer(backseatID, wrong.id)
+        #expect(session.state?.round?.revealing == true)
+        #expect(session.state?.player(riderID)?.score == 4 + 1)
+        #expect(session.state?.player(backseatID)?.score == 4)
+        #expect(session.state?.player(backseatID)?.strikes == 1)
+        #expect(session.state?.player(hostID)?.score == 4, "the driver's rejected tap never touched their score")
+    }
+
+    @Test func groupBonusAppliesWhenEveryParticipatingNonDriverIsCorrect() async throws {
+        startParty(modeSlug: "three-strikes", deck: SeedQuestions.movieQuoteMashup, minPlayers: 3)
+        session.assignRole(.pilot, to: hostID)
+        try await playNormalQuestions(deck: SeedQuestions.movieQuoteMashup, count: 4)
+
+        let deck = try #require(session.state?.round?.questions)
+        let correct = try #require(deck[4].correctOptionID)
+        answer(riderID, correct)
+        answer(backseatID, correct)
+        await session.debugWaitForAdvance()
+
+        #expect(session.state?.player(riderID)?.score == 4 + 1 + AllAboard.groupBonus)
+        #expect(session.state?.player(backseatID)?.score == 4 + 1 + AllAboard.groupBonus)
+        #expect(session.state?.player(hostID)?.score == 4, "the driver never participated, bonus or not")
+    }
+
+    @Test func eliminationBracketExcludesAlreadyEliminatedPlayersFromAllAboard() async throws {
+        startParty(modeSlug: Elimination.bracketModeSlug, deck: SeedQuestions.movieQuoteMashup, minPlayers: 3)
+        let deck = try #require(session.state?.round?.questions)
+
+        // Rider misses immediately — one strike is enough to be out.
+        let q0Correct = try #require(deck[0].correctOptionID)
+        let q0Wrong = try #require(deck[0].options.first { $0.id != q0Correct })
+        answer(hostID, q0Correct)
+        answer(riderID, q0Wrong.id)
+        answer(backseatID, q0Correct)
+        await session.debugWaitForAdvance()
+        #expect(session.state?.player(riderID)?.strikes == 1)
+
+        try await playFrom(deck: deck, start: 1, upTo: 4)
+        #expect(session.state?.round?.questionIndex == 4)
+
+        // Rider is out — their All Aboard tap is rejected too, same as any
+        // other question. Not a "for fun" participation tier.
+        let correct = try #require(deck[4].correctOptionID)
+        session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: correct))
+        #expect(session.state?.round?.revealing != true)
+        #expect(session.state?.player(riderID)?.lastAnswerCorrect == nil)
+
+        answer(hostID, correct)
+        answer(backseatID, correct)
+        #expect(session.state?.round?.revealing == true)
+        // Only the two still-in-it players counted toward the group bonus:
+        // 1 point each from question 0, 3 more from questions 1-3, +1 for
+        // this one, plus the whole-car bonus (the eliminated rider was
+        // never a participant to break the "everyone" in "everyone correct").
+        #expect(session.state?.player(hostID)?.score == 4 + 1 + AllAboard.groupBonus)
+        #expect(session.state?.player(backseatID)?.score == 4 + 1 + AllAboard.groupBonus)
+    }
+
+    private func playFrom(deck: [TriviaQuestion], start: Int, upTo: Int) async throws {
+        for index in start..<upTo {
+            let correct = try #require(deck[index].correctOptionID)
+            answer(hostID, correct)
+            answer(backseatID, correct)
+            await session.debugWaitForAdvance()
+        }
+    }
+
+    @Test func teamRelayAllAboardLetsBothSquadsAnswerThenResumesNormalRotation() async throws {
+        let deck = SeedQuestions.movieQuoteMashup
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let fourthID = UUID()
+        let config = PartyConfig(modeSlug: TeamRelay.modeSlug, modeName: "Team Relay",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 4, requiresEvenPlayers: true)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.debugApplyIntent(.hello(playerID: fourthID, name: "Fourth"))
+        session.assignTeam(0, to: hostID)
+        session.assignTeam(0, to: riderID)
+        session.assignTeam(1, to: backseatID)
+        session.assignTeam(1, to: fourthID)
+        session.startRide()
+        session.startTrip()
+
+        #expect(session.state?.round?.teamTurnPlayerID == [hostID, backseatID])
+
+        // Play questions 0-3 normally, turn-based — rider and fourth each
+        // get exactly 2 of those 4 turns (seat-order rotation).
+        for _ in 0..<4 {
+            let index = try #require(session.state?.round?.questionIndex)
+            let correct = try #require(deck[index].correctOptionID)
+            let turn = try #require(session.state?.round?.teamTurnPlayerID).compactMap { $0 }
+            for id in turn {
+                session.debugApplyIntent(.submitAnswer(playerID: id, optionID: correct))
+            }
+            await session.debugWaitForAdvance()
+        }
+        #expect(session.state?.round?.questionIndex == 4)
+        let riderScoreBeforeAllAboard = try #require(session.state?.player(riderID)?.score)
+        #expect(riderScoreBeforeAllAboard == 2)
+
+        // All Aboard: everyone on both squads answers this one, not just
+        // whoever's turn it is (host/backseat, per the rotation above).
+        let correct = try #require(deck[4].correctOptionID)
+        session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: correct))    // off-turn, team 0
+        session.debugApplyIntent(.submitAnswer(playerID: fourthID, optionID: correct))   // off-turn, team 1
+        #expect(session.state?.round?.revealing != true, "still waiting on the on-turn players too")
+        session.debugApplyIntent(.submitAnswer(playerID: hostID, optionID: correct))
+        session.debugApplyIntent(.submitAnswer(playerID: backseatID, optionID: correct))
+        #expect(session.state?.round?.revealing == true)
+        #expect(session.state?.player(riderID)?.score == riderScoreBeforeAllAboard + 1 + AllAboard.groupBonus)
+
+        await session.debugWaitForAdvance()
+        // Rotation resumes exactly where it left off — All Aboard never
+        // touched `teamTurnPlayerID`, since nobody's individual turn was
+        // "used" by a question everybody answered.
+        #expect(session.state?.round?.teamTurnPlayerID == [riderID, fourthID])
+    }
+
+    @Test func herdRevealGroupBonusFiresWhenTheWholeCarVotesTheSameWay() async throws {
+        startParty(modeSlug: HerdReveal.modeSlug, deck: SeedQuestions.movieQuoteMashup, minPlayers: 3)
+        let deck = try #require(session.state?.round?.questions)
+
+        // Herd Reveal scores by majority vote — everyone picking the same
+        // option keeps every one of these questions trivially "correct".
+        for index in 0..<4 {
+            let pick = deck[index].options[0].id
+            answer(hostID, pick)
+            answer(riderID, pick)
+            answer(backseatID, pick)
+            await session.debugWaitForAdvance()
+        }
+
+        // Unanimous vote on the All Aboard question: in Herd Reveal,
+        // "everyone correct" and "the car agreed" are the same condition,
+        // since correctness there IS agreement with the group — no special
+        // casing needed for the two mechanics not to conflict.
+        let pick = try #require(deck[4].options.first?.id)
+        answer(hostID, pick)
+        answer(riderID, pick)
+        answer(backseatID, pick)
+
+        #expect(session.state?.round?.revealing == true)
+        #expect(session.state?.player(hostID)?.score == 4 + 1 + AllAboard.groupBonus)
+        #expect(session.state?.player(riderID)?.score == 4 + 1 + AllAboard.groupBonus)
+    }
+}
+
+/// The cadence math itself, including the Double or Nothing exemption when
+/// All Aboard's every-5th and the wager round's every-4th coincide (every
+/// 20th question) — stacking a flat group bonus onto a +wager/-wager
+/// settlement would collide both mechanically and visually, so the wager
+/// question wins and All Aboard sits that one out.
+struct AllAboardCadenceTests {
+    @Test func exemptsDoubleOrNothingWagerQuestionsWhenCadencesCoincide() {
+        #expect(AllAboard.isAllAboardIndex(19) == true)
+        #expect(DoubleOrNothing.isWagerIndex(19) == true)
+        #expect(AllAboard.isActive(19, modeSlug: DoubleOrNothing.modeSlug) == false)
+        // Same index, any other mode: unaffected, still All Aboard.
+        #expect(AllAboard.isActive(19, modeSlug: "three-strikes") == true)
+        // A non-coinciding All Aboard index still fires normally even in
+        // Double or Nothing.
+        #expect(AllAboard.isActive(4, modeSlug: DoubleOrNothing.modeSlug) == true)
+        #expect(AllAboard.isActive(3, modeSlug: "three-strikes") == false)
+    }
+}
+
+/// Copilot's Curveball × All Aboard, when the every-4th preview and the
+/// every-5th bonus question land on the same question (every 20th): the
+/// preview mechanic is untouched (still only the copilot peeks, still
+/// nobody can answer during the window), and once it opens, it opens as an
+/// All Aboard question — the driver still can't answer even though nothing
+/// stops them on every other question in this mode.
+@MainActor
+struct AllAboardCurveballTests {
+    let session = PartySession()
+    let hostID = UUID()
+    let riderID = UUID()
+    let backseatID = UUID()
+
+    @Test func driverStillExcludedOnceTheCoincidingCurveballPreviewOpens() async throws {
+        let deck = SeedQuestions.movieQuoteMashup
+        session.suppressesNetworking = true
+        session.revealDuration = .zero
+        session.nobodyConnectedDelay = .zero
+        // Deliberately non-zero: a zero-duration preview window races
+        // against the many chained `debugWaitForAdvance()` calls this test
+        // needs to reach the 20th question, since the preview-ending Task
+        // can slip in during one of those awaits. A short real duration
+        // keeps "still in preview until I explicitly wait it out"
+        // deterministic instead.
+        session.curveballPreviewDuration = .milliseconds(30)
+        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
+        let config = PartyConfig(modeSlug: CopilotsCurveball.modeSlug, modeName: "Copilot's Curveball",
+                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+                                 difficulty: .familyMix, minPlayers: 3)
+        session.host(partyName: "Testers", code: "1234", config: config,
+                     playerID: hostID, playerName: "Pilot")
+        session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
+        session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.assignRole(.pilot, to: hostID)
+        session.assignRole(.copilot, to: riderID)
+        session.startRide()
+        session.startTrip()
+
+        // Fast-forward through questions 0-18 — the driver answers normally
+        // throughout, since nothing restricts a non-All-Aboard question.
+        for index in 0..<19 {
+            if CopilotsCurveball.isCurveballIndex(index) {
+                await session.debugWaitForCurveballWindow()
+            }
+            let correct = try #require(session.state?.round?.questions[index].correctOptionID)
+            session.submitLocalAnswer(optionID: correct)
+            session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: correct))
+            session.debugApplyIntent(.submitAnswer(playerID: backseatID, optionID: correct))
+            await session.debugWaitForAdvance()
+        }
+        #expect(session.state?.round?.questionIndex == 19)
+        #expect(session.state?.round?.curveballPreview == true,
+                "the 20th question still opens with its curveball preview, untouched by All Aboard")
+
+        // Nobody can answer during the preview — that mechanic is untouched.
+        let correct = try #require(session.state?.round?.questions[19].correctOptionID)
+        session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: correct))
+        #expect(session.state?.round?.revealing != true)
+
+        await session.debugWaitForCurveballWindow()
+        #expect(session.state?.round?.curveballPreview == false)
+
+        // Once it opens, it's an All Aboard question: the driver (host) is
+        // excluded even though nothing stopped them on the other 19.
+        session.submitLocalAnswer(optionID: correct)
+        #expect(session.state?.round?.revealing != true, "the driver's tap on an All Aboard question is rejected")
+
+        session.debugApplyIntent(.submitAnswer(playerID: riderID, optionID: correct))
+        session.debugApplyIntent(.submitAnswer(playerID: backseatID, optionID: correct))
+        #expect(session.state?.round?.revealing == true)
+        // 19 base points from questions 0-18, plus the group bonus already
+        // earned on the 3 earlier All Aboard questions in that span
+        // (indices 4, 9, 14), plus this one: +1 base and another bonus.
+        let earlierAllAboardHits = 3
+        let expectedScore = 19 + earlierAllAboardHits * AllAboard.groupBonus + 1 + AllAboard.groupBonus
+        #expect(session.state?.player(riderID)?.score == expectedScore)
     }
 }

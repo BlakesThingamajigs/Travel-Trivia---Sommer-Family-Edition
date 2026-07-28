@@ -145,14 +145,28 @@ final class GameEngine {
     }
     /// Team Relay: is it the local player's turn to answer for their squad?
     /// True outside Team Relay so every other mode's answer gating is
-    /// unaffected.
+    /// unaffected. An All Aboard question suspends the turn gate — every
+    /// connected non-driver rider on both squads answers that one.
     var isMyTurnInTeamRelay: Bool {
         guard isTeamRelayMode, let localPlayerID else { return true }
+        if currentQuestionIsAllAboard { return true }
         return teamTurnPlayerIDs.contains(localPlayerID)
     }
     func teamScore(_ team: Int) -> Int {
         players.filter { $0.teamIndex == team }.reduce(0) { $0 + $1.score }
     }
+
+    // MARK: - All Aboard
+
+    /// True on the questions where every non-driver seat gets its own
+    /// answer UI instead of the round's usual single/relay answerer — party
+    /// only (`activeModeSlug` is nil in practice, where this can't mean
+    /// anything: there's only one real device).
+    var currentQuestionIsAllAboard: Bool {
+        guard let activeModeSlug else { return false }
+        return AllAboard.isActive(questionIndex, modeSlug: activeModeSlug)
+    }
+    var localPlayerIsDriver: Bool { userPlayer?.role == .pilot }
 
     /// Local player locks in a wager during Double or Nothing's window.
     func submitLocalWager(_ amount: Int) {
@@ -277,6 +291,7 @@ final class GameEngine {
               !curveballPreviewActive,
               !wagerWindowActive,
               isMyTurnInTeamRelay,
+              !(currentQuestionIsAllAboard && localPlayerIsDriver),
               userPickedOptionID == nil,
               let user = userPlayer, !user.isOut,
               let question = currentQuestion,
