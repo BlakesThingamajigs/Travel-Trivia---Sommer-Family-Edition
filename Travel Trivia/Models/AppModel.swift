@@ -232,7 +232,13 @@ final class AppModel {
         case .lobby:
             guard party.isHost, state.connectedCount >= 2 else { return }
             // Sync check: host takes pilot, hands copilot to the first rider.
-            if state.player(myID)?.role == .none {
+            // (`?.role == .none` is the classic Optional-vs-enum-case-named
+            // "none" trap: since `.role` is optional-chained here, Swift
+            // resolves the bare `.none` on the right as `Optional.none`
+            // (nil) rather than `PartyRole.none`, so the comparison was
+            // always false and the host never actually got the pilot role
+            // — spell the type out to disambiguate.)
+            if state.player(myID)?.role == PartyRole.none {
                 party.assignRole(.pilot, to: myID)
             }
             if let rider = state.players.first(where: { $0.id != myID && $0.presence == .connected }),
