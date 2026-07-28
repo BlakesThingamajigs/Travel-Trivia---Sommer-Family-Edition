@@ -27,5 +27,12 @@
 			<string>com.blakesthingamajigs.Travel-Trivia.oauth</string>
 		</dict>
 	</array>
+
+	<!-- Export compliance: the app only uses SHA256 nonce hashing (Sign in
+	     with Apple, AuthManager.sha256) and standard HTTPS/TLS (Supabase) —
+	     both exempt. Declaring this here skips the manual export-compliance
+	     prompt App Store Connect would otherwise ask on every build upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

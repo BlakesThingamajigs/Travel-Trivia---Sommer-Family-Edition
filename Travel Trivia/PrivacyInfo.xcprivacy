@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- No tracking (no IDFA, no cross-app/cross-site data sharing for
+	     advertising). Confirmed by grep: no AdSupport/ATTrackingManager/
+	     advertisingIdentifier usage anywhere in the app target. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!-- Required-reason APIs actually used by the app target. Only
+	     UserDefaults is touched (Models/LocalProfile.swift: playerID,
+	     display name, audio-output preference, shuffle-genres toggle,
+	     first-launch prompt flag) — all read/written by this app only,
+	     never shared via an App Group (none exists in this project) and
+	     never read from data written by another app/extension. No file-
+	     timestamp, disk-space, active-keyboard, or system-boot-time APIs
+	     are used anywhere in the codebase (verified by grep across the
+	     app target: no FileManager attribute/timestamp calls, no
+	     volumeAvailableCapacity/systemFreeSize, no ProcessInfo.systemUptime).
+	     Keychain use (Supabase Auth's session storage, AuthManager.swift)
+	     is not one of Apple's required-reason API categories, so it has no
+	     entry here. Third-party SPM dependencies (supabase-swift and its
+	     transitive deps) ship and merge their own privacy manifests at
+	     build time if they declare required-reason API use — not
+	     hand-authored here. -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Data collection: non-host players are always local-only (no
+	     account, nothing sent to Supabase — display name/avatar/badges/
+	     coins/scores persist only on-device via UserDefaults/SwiftData;
+	     see Models/LocalProfile.swift and the party architecture doc's
+	     COPPA rationale). The only real PII the app ever sees belongs to
+	     the party HOST, who signs in via Sign in with Apple or Google
+	     (Supabase Auth) purely to create/own a party; AuthManager.swift
+	     explicitly keeps this to id/name/email and never forwards local
+	     profile data (avatar, score, badges, cosmetics) to Supabase. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeName</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
