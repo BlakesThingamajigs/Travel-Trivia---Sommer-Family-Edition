@@ -55,7 +55,8 @@ struct GameEngineTests {
         let engine = harness.engine
         engine.startGame(seed: 7)
         #expect(engine.phase == .playing)
-        #expect(engine.questions.count == 16)
+        // Round 2 (2026-07-27) grew Riddle Realm from 16 to 46 questions.
+        #expect(engine.questions.count == 46)
         for question in engine.questions {
             #expect(question.options.count == 6)
             #expect(question.options.contains { $0.id == question.correctOptionID })
@@ -119,7 +120,11 @@ struct GameEngineTests {
         engine.startGame(seed: 7)
 
         var answered = 0
-        while engine.phase == .playing, answered < 20 {
+        // Nobody strikes out at this bot accuracy, so the round only ends by
+        // exhausting the whole Riddle Realm deck — round 2 (2026-07-27) grew
+        // that from 16 to 46 questions, so the safety cap and final count
+        // both need to cover the full 46.
+        while engine.phase == .playing, answered < 50 {
             let question = try #require(engine.currentQuestion)
             engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
             await engine.waitForPendingAdvance()
@@ -129,7 +134,7 @@ struct GameEngineTests {
         #expect(engine.phase == .victory)
         // The user answered every question correctly, so they must win
         #expect(engine.winner?.isUser == true)
-        #expect(answered == 16)
+        #expect(answered == 46)
     }
 
     @Test func backToRideResetsForANewRound() async throws {
@@ -153,11 +158,13 @@ struct SeedContentTests {
 
     @Test func seedPackHasSixteenWellFormedRiddles() {
         let questions = SeedQuestions.riddleRealm
-        #expect(questions.count == 16)
+        // Round 2 (2026-07-27) added 30 more riddles (17-46) on top of the
+        // original 16; counts below reflect the combined pack.
+        #expect(questions.count == 46)
 
-        #expect(questions.filter { $0.difficulty == .easy }.count == 6)
-        #expect(questions.filter { $0.difficulty == .medium }.count == 6)
-        #expect(questions.filter { $0.difficulty == .hard }.count == 4)
+        #expect(questions.filter { $0.difficulty == .easy }.count == 19)
+        #expect(questions.filter { $0.difficulty == .medium }.count == 18)
+        #expect(questions.filter { $0.difficulty == .hard }.count == 9)
 
         for question in questions {
             #expect(question.options.count == 6)
@@ -165,15 +172,16 @@ struct SeedContentTests {
             #expect(Set(question.options.map(\.id)).count == 6)
             #expect(!question.prompt.isEmpty)
         }
-        #expect(Set(questions.map(\.id)).count == 16)
+        #expect(Set(questions.map(\.id)).count == 46)
     }
 
     @Test func wouldYouRatherPackIsAllMajorityScored() {
         let questions = SeedQuestions.wouldYouRather
-        #expect(questions.count == 40)
-        #expect(questions.filter { $0.difficulty == .easy }.count == 13)
-        #expect(questions.filter { $0.difficulty == .medium }.count == 19)
-        #expect(questions.filter { $0.difficulty == .hard }.count == 8)
+        // Round 2 (2026-07-27) added 30 more (41-70) on top of the original 40.
+        #expect(questions.count == 70)
+        #expect(questions.filter { $0.difficulty == .easy }.count == 26)
+        #expect(questions.filter { $0.difficulty == .medium }.count == 34)
+        #expect(questions.filter { $0.difficulty == .hard }.count == 10)
 
         for question in questions {
             #expect(question.options.count == 6)
@@ -182,15 +190,16 @@ struct SeedContentTests {
             #expect(Set(question.options.map(\.id)).count == 6)
             #expect(!question.prompt.isEmpty)
         }
-        #expect(Set(questions.map(\.id)).count == 40)
+        #expect(Set(questions.map(\.id)).count == 70)
     }
 
     @Test func movieQuoteMashupPackHasFixedAnswers() {
         let questions = SeedQuestions.movieQuoteMashup
-        #expect(questions.count == 40)
-        #expect(questions.filter { $0.difficulty == .easy }.count == 15)
-        #expect(questions.filter { $0.difficulty == .medium }.count == 14)
-        #expect(questions.filter { $0.difficulty == .hard }.count == 11)
+        // Round 2 (2026-07-27) added 30 more (41-70) on top of the original 40.
+        #expect(questions.count == 70)
+        #expect(questions.filter { $0.difficulty == .easy }.count == 26)
+        #expect(questions.filter { $0.difficulty == .medium }.count == 27)
+        #expect(questions.filter { $0.difficulty == .hard }.count == 17)
 
         for question in questions {
             #expect(question.options.count == 6)
@@ -198,16 +207,21 @@ struct SeedContentTests {
             #expect(question.options.contains { $0.id == question.correctOptionID })
             #expect(Set(question.options.map(\.id)).count == 6)
         }
-        #expect(Set(questions.map(\.id)).count == 40)
+        #expect(Set(questions.map(\.id)).count == 70)
     }
 
     @Test func deckDealsRouteByGenreAndTier() {
+        // Round 2 (2026-07-27) grew both packs; QuestionDeck.deal returns
+        // every tier-matching question (no fixed round length), so these
+        // counts track the packs' new easy/non-easy splits directly:
+        // would-you-rather is now 70 total (26 easy / 34 medium / 10 hard),
+        // movie-quote-mashup is now 70 total (26 easy / 27 medium / 17 hard).
         let littleOnes = QuestionDeck.deal(genreSlug: "would-you-rather", tier: .littleOnes, seed: 3)
-        #expect(littleOnes.count == 13)
+        #expect(littleOnes.count == 26)
         #expect(littleOnes.allSatisfy { $0.difficulty == .easy && $0.id.hasPrefix("wyr-") })
 
         let grownUp = QuestionDeck.deal(genreSlug: "movie-quote-mashup", tier: .grownUp, seed: 3)
-        #expect(grownUp.count == 25)
+        #expect(grownUp.count == 44)
         #expect(grownUp.allSatisfy { $0.difficulty != .easy && $0.id.hasPrefix("mqm-") })
 
         // sound-fx-guess got real bundled content in the audio-genres
@@ -221,9 +235,10 @@ struct SeedContentTests {
 
         // An unrecognized genre slug still deals a playable riddle deck —
         // every real genre now has bundled content, so this exercises the
-        // fallback path the old test used sound-fx-guess for.
+        // fallback path the old test used sound-fx-guess for. Round 2
+        // (2026-07-27) grew Riddle Realm from 16 to 46 questions.
         let fallback = QuestionDeck.deal(genreSlug: "not-a-real-genre", tier: .familyMix, seed: 3)
-        #expect(fallback.count == 16)
+        #expect(fallback.count == 46)
     }
 
     /// Genre Batch 2: six new fixed-answer packs (see SeedQuestions.swift).
@@ -239,8 +254,10 @@ struct SeedContentTests {
             ("time", "time-machine", SeedQuestions.timeMachine),
             ("pop", "pop-culture-time-capsule", SeedQuestions.popCultureTimeCapsule),
         ]
+        // Round 2 (2026-07-27) added 30 more questions to each of these 6
+        // genres on top of the original 30, so 60 each now.
         for (prefix, slug, questions) in packs {
-            #expect(questions.count == 30, "\(slug) should have 30 questions")
+            #expect(questions.count == 60, "\(slug) should have 60 questions")
             for question in questions {
                 #expect(question.options.count == 6)
                 #expect(question.options.contains { $0.id == question.correctOptionID })
@@ -248,8 +265,8 @@ struct SeedContentTests {
                 #expect(!question.prompt.isEmpty)
                 #expect(question.id.hasPrefix("\(prefix)-"))
             }
-            #expect(Set(questions.map(\.id)).count == 30)
-            #expect(SeedQuestions.packs[slug]?.count == 30)
+            #expect(Set(questions.map(\.id)).count == 60)
+            #expect(SeedQuestions.packs[slug]?.count == 60)
         }
     }
 
@@ -301,7 +318,8 @@ struct GenreBatch2EngineTests {
         let engine = harness.engine
         engine.botRoll = { 0.99 }
         engine.startGame(seed: 7, pack: pack)
-        #expect(engine.questions.count == 30)
+        // Round 2 (2026-07-27) grew each of these packs from 30 to 60.
+        #expect(engine.questions.count == 60)
         let question = try #require(engine.currentQuestion)
         engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
         #expect(engine.userPlayer?.score == 1)
@@ -1070,7 +1088,11 @@ struct SixSeatPartyTests {
         #expect(session.state?.phase == .playing)
 
         var answered = 0
-        while session.state?.phase == .playing, answered < 20 {
+        // This test's stubbed dealDeck hands back the full Riddle Realm pack
+        // (not the real app's truncated QuestionDeck.deal), so the safety
+        // cap has to cover the whole pack — 46 questions as of round 2
+        // (2026-07-27).
+        while session.state?.phase == .playing, answered < 50 {
             let question = try #require(session.state?.round?.questions[
                 session.state?.round?.questionIndex ?? 0])
             let correct = try #require(question.correctOptionID)
@@ -1164,7 +1186,10 @@ struct ProgressStoreTests {
         engine.startGame(seed: 7)
 
         var answered = 0
-        while engine.phase == .playing, answered < 20 {
+        // engine.startGame(seed:) defaults to the full Riddle Realm pack,
+        // which round 2 (2026-07-27) grew to 46 questions — the safety cap
+        // has to cover the whole pack for this to reach victory.
+        while engine.phase == .playing, answered < 50 {
             let question = try #require(engine.currentQuestion)
             engine.submitUserAnswer(optionID: question.correctOptionID ?? question.options[0].id)
             await engine.waitForPendingAdvance()
