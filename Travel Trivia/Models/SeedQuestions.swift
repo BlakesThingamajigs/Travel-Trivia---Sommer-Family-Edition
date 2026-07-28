@@ -1001,8 +1001,8 @@ nonisolated enum SeedQuestions {
          ["Kingda Ka", "Steel Dragon", "Fury 325", "Millennium Force", "Top Thrill Dragster", "The Smiler"]),
         (.hard, "What's the largest desert lake in the world?",
          ["The Caspian Sea", "The Dead Sea", "Lake Eyre", "The Aral Sea", "Lake Chad", "The Great Salt Lake"]),
-        (.medium, "What's among the saltiest bodies of water in the world?",
-         ["The Dead Sea", "The Great Salt Lake", "The Caspian Sea", "The Red Sea", "The Arabian Sea", "Lake Assal"]),
+        (.hard, "What's the saltiest body of water on Earth, found in Antarctica's Dry Valleys?",
+         ["Don Juan Pond", "The Dead Sea", "The Great Salt Lake", "The Caspian Sea", "Lake Assal", "The Red Sea"]),
         (.medium, "What's the driest inhabited place on Earth?",
          ["The Atacama Desert", "The Sahara Desert", "Death Valley", "The Gobi Desert", "The Mojave Desert", "Antarctica"]),
         (.hard, "What's among the wettest places on Earth by average annual rainfall?",
@@ -1019,7 +1019,7 @@ nonisolated enum SeedQuestions {
          ["LEGO", "Barbie", "Hot Wheels", "Monopoly", "Rubik's Cube", "Uno"]),
         (.medium, "What's the biggest-selling board game of all time?",
          ["Monopoly", "Scrabble", "Clue", "Risk", "The Game of Life", "Sorry!"]),
-        (.hard, "What's among the fastest production cars in the world by top speed record?",
+        (.hard, "Which car brand held the officially verified top-speed record for production cars for several years with its Chiron Super Sport 300+?",
          ["Bugatti", "Koenigsegg", "SSC", "Hennessey", "McLaren", "Ferrari"]),
     ])
 
