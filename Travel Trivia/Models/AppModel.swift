@@ -157,6 +157,8 @@ final class AppModel {
     /// -TTAutoFlow makes the device play itself (host advances phases,
     /// everyone claims seats and answers); -TTShortGrace shrinks the
     /// disconnect grace window to 10 s so dropout tests don't wait 45.
+    /// -TTGarage jumps straight to My Garage (screenshot shortcut, mirrors
+    /// -TTSettings).
     func debugApplyLaunchArguments(_ arguments: [String]) {
         if arguments.contains("-TTResetProgress") {
             progress.debugResetAll()
@@ -169,6 +171,9 @@ final class AppModel {
         }
         if arguments.contains("-TTSettings") {
             route = .settings
+        }
+        if arguments.contains("-TTGarage") {
+            route = .garage
         }
         if arguments.contains("-TTPractice") || arguments.contains("-TTAutoStart")
             || arguments.contains("-TTVictory") {
