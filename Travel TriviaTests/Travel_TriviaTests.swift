@@ -55,8 +55,9 @@ struct GameEngineTests {
         let engine = harness.engine
         engine.startGame(seed: 7)
         #expect(engine.phase == .playing)
-        // Round 2 (2026-07-27) grew Riddle Realm from 16 to 46 questions.
-        #expect(engine.questions.count == 46)
+        // Round 2 (2026-07-27) grew Riddle Realm from 16 to 46 questions;
+        // round 3 (2026-08-01) grew it again to 76.
+        #expect(engine.questions.count == 76)
         for question in engine.questions {
             #expect(question.options.count == 6)
             #expect(question.options.contains { $0.id == question.correctOptionID })
@@ -137,9 +138,9 @@ struct GameEngineTests {
         var answered = 0
         // Nobody strikes out at this bot accuracy, so the round only ends by
         // exhausting the whole Riddle Realm deck — round 2 (2026-07-27) grew
-        // that from 16 to 46 questions, so the safety cap and final count
-        // both need to cover the full 46.
-        while engine.phase == .playing, answered < 50 {
+        // that from 16 to 46 questions, round 3 (2026-08-01) grew it again to
+        // 76, so the safety cap and final count both need to cover the full 76.
+        while engine.phase == .playing, answered < 80 {
             let question = try #require(engine.currentQuestion)
             engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
             await engine.waitForPendingAdvance()
@@ -149,7 +150,7 @@ struct GameEngineTests {
         #expect(engine.phase == .victory)
         // The user answered every question correctly, so they must win
         #expect(engine.winner?.isUser == true)
-        #expect(answered == 46)
+        #expect(answered == 76)
     }
 
     @Test func backToRideResetsForANewRound() async throws {
@@ -174,12 +175,13 @@ struct SeedContentTests {
     @Test func seedPackHasSixteenWellFormedRiddles() {
         let questions = SeedQuestions.riddleRealm
         // Round 2 (2026-07-27) added 30 more riddles (17-46) on top of the
-        // original 16; counts below reflect the combined pack.
-        #expect(questions.count == 46)
+        // original 16; round 3 (2026-08-01) added 30 more (47-76). Counts
+        // below reflect the combined pack.
+        #expect(questions.count == 76)
 
-        #expect(questions.filter { $0.difficulty == .easy }.count == 19)
-        #expect(questions.filter { $0.difficulty == .medium }.count == 18)
-        #expect(questions.filter { $0.difficulty == .hard }.count == 9)
+        #expect(questions.filter { $0.difficulty == .easy }.count == 29)
+        #expect(questions.filter { $0.difficulty == .medium }.count == 32)
+        #expect(questions.filter { $0.difficulty == .hard }.count == 15)
 
         for question in questions {
             #expect(question.options.count == 6)
@@ -187,16 +189,19 @@ struct SeedContentTests {
             #expect(Set(question.options.map(\.id)).count == 6)
             #expect(!question.prompt.isEmpty)
         }
-        #expect(Set(questions.map(\.id)).count == 46)
+        #expect(Set(questions.map(\.id)).count == 76)
     }
 
     @Test func wouldYouRatherPackIsAllMajorityScored() {
         let questions = SeedQuestions.wouldYouRather
-        // Round 2 (2026-07-27) added 30 more (41-70) on top of the original 40.
-        #expect(questions.count == 70)
-        #expect(questions.filter { $0.difficulty == .easy }.count == 26)
-        #expect(questions.filter { $0.difficulty == .medium }.count == 34)
-        #expect(questions.filter { $0.difficulty == .hard }.count == 10)
+        // Round 2 (2026-07-27) added 30 more (41-70) on top of the original
+        // 40. Round 3 (2026-08-01) added 60 more (71-130): a "round 3" batch
+        // of 30 that was drafted back on 2026-07-28 but never actually
+        // seeded until now, plus the separate "round 4" batch of 30.
+        #expect(questions.count == 130)
+        #expect(questions.filter { $0.difficulty == .easy }.count == 48)
+        #expect(questions.filter { $0.difficulty == .medium }.count == 62)
+        #expect(questions.filter { $0.difficulty == .hard }.count == 20)
 
         for question in questions {
             #expect(question.options.count == 6)
@@ -205,16 +210,17 @@ struct SeedContentTests {
             #expect(Set(question.options.map(\.id)).count == 6)
             #expect(!question.prompt.isEmpty)
         }
-        #expect(Set(questions.map(\.id)).count == 70)
+        #expect(Set(questions.map(\.id)).count == 130)
     }
 
     @Test func movieQuoteMashupPackHasFixedAnswers() {
         let questions = SeedQuestions.movieQuoteMashup
-        // Round 2 (2026-07-27) added 30 more (41-70) on top of the original 40.
-        #expect(questions.count == 70)
-        #expect(questions.filter { $0.difficulty == .easy }.count == 26)
-        #expect(questions.filter { $0.difficulty == .medium }.count == 27)
-        #expect(questions.filter { $0.difficulty == .hard }.count == 17)
+        // Round 2 (2026-07-27) added 30 more (41-70) on top of the original
+        // 40. Round 3 (2026-08-01) added 30 more (71-100).
+        #expect(questions.count == 100)
+        #expect(questions.filter { $0.difficulty == .easy }.count == 36)
+        #expect(questions.filter { $0.difficulty == .medium }.count == 41)
+        #expect(questions.filter { $0.difficulty == .hard }.count == 23)
 
         for question in questions {
             #expect(question.options.count == 6)
@@ -222,38 +228,41 @@ struct SeedContentTests {
             #expect(question.options.contains { $0.id == question.correctOptionID })
             #expect(Set(question.options.map(\.id)).count == 6)
         }
-        #expect(Set(questions.map(\.id)).count == 70)
+        #expect(Set(questions.map(\.id)).count == 100)
     }
 
     @Test func deckDealsRouteByGenreAndTier() {
-        // Round 2 (2026-07-27) grew both packs; QuestionDeck.deal returns
-        // every tier-matching question (no fixed round length), so these
-        // counts track the packs' new easy/non-easy splits directly:
-        // would-you-rather is now 70 total (26 easy / 34 medium / 10 hard),
-        // movie-quote-mashup is now 70 total (26 easy / 27 medium / 17 hard).
+        // Round 3 (2026-08-01) grew both packs again; QuestionDeck.deal
+        // returns every tier-matching question (no fixed round length), so
+        // these counts track the packs' new easy/non-easy splits directly:
+        // would-you-rather is now 130 total (48 easy / 62 medium / 20 hard),
+        // movie-quote-mashup is now 100 total (36 easy / 41 medium / 23 hard).
         let littleOnes = QuestionDeck.deal(genreSlug: "would-you-rather", tier: .littleOnes, seed: 3)
-        #expect(littleOnes.count == 26)
+        #expect(littleOnes.count == 48)
         #expect(littleOnes.allSatisfy { $0.difficulty == .easy && $0.id.hasPrefix("wyr-") })
 
         let grownUp = QuestionDeck.deal(genreSlug: "movie-quote-mashup", tier: .grownUp, seed: 3)
-        #expect(grownUp.count == 44)
+        #expect(grownUp.count == 64)
         #expect(grownUp.allSatisfy { $0.difficulty != .easy && $0.id.hasPrefix("mqm-") })
 
         // sound-fx-guess got real bundled content in the audio-genres
-        // session — family-mix allows all 3 difficulties, so the whole
-        // 10-clip pack deals (no genre has an empty tier gap for these 3
-        // audio genres; each pack's easy/medium/hard split covers all of
-        // familyMix, littleOnes, and grownUp with something playable).
+        // session, then grew again in the audio-genre-expansion pass
+        // (2026-07-28: 10 -> 23 clips) — family-mix allows all 3
+        // difficulties, so the whole pack deals (no genre has an empty
+        // tier gap for these 3 audio genres; each pack's easy/medium/hard
+        // split covers all of familyMix, littleOnes, and grownUp with
+        // something playable).
         let soundFX = QuestionDeck.deal(genreSlug: "sound-fx-guess", tier: .familyMix, seed: 3)
-        #expect(soundFX.count == 10)
+        #expect(soundFX.count == 23)
         #expect(soundFX.allSatisfy { $0.hasAudioClip })
 
         // An unrecognized genre slug still deals a playable riddle deck —
         // every real genre now has bundled content, so this exercises the
         // fallback path the old test used sound-fx-guess for. Round 2
-        // (2026-07-27) grew Riddle Realm from 16 to 46 questions.
+        // (2026-07-27) grew Riddle Realm from 16 to 46 questions; round 3
+        // (2026-08-01) grew it again to 76.
         let fallback = QuestionDeck.deal(genreSlug: "not-a-real-genre", tier: .familyMix, seed: 3)
-        #expect(fallback.count == 46)
+        #expect(fallback.count == 76)
     }
 
     /// Genre Batch 2: six new fixed-answer packs (see SeedQuestions.swift).
@@ -270,9 +279,10 @@ struct SeedContentTests {
             ("pop", "pop-culture-time-capsule", SeedQuestions.popCultureTimeCapsule),
         ]
         // Round 2 (2026-07-27) added 30 more questions to each of these 6
-        // genres on top of the original 30, so 60 each now.
+        // genres on top of the original 30 (60 each); round 3 (2026-08-01)
+        // added 30 more on top of that, so 90 each now.
         for (prefix, slug, questions) in packs {
-            #expect(questions.count == 60, "\(slug) should have 60 questions")
+            #expect(questions.count == 90, "\(slug) should have 90 questions")
             for question in questions {
                 #expect(question.options.count == 6)
                 #expect(question.options.contains { $0.id == question.correctOptionID })
@@ -280,8 +290,8 @@ struct SeedContentTests {
                 #expect(!question.prompt.isEmpty)
                 #expect(question.id.hasPrefix("\(prefix)-"))
             }
-            #expect(Set(questions.map(\.id)).count == 60)
-            #expect(SeedQuestions.packs[slug]?.count == 60)
+            #expect(Set(questions.map(\.id)).count == 90)
+            #expect(SeedQuestions.packs[slug]?.count == 90)
         }
     }
 
@@ -314,8 +324,21 @@ struct SeedContentTests {
                 // Every clip must actually resolve inside the app bundle —
                 // catches a renamed/missing resource at test time instead
                 // of a silent no-op at play time.
-                #expect(AudioClipLibrary.url(for: question, genreSlug: slug) != nil,
-                        "\(question.id)'s clip \(question.mediaFileName ?? "nil") isn't bundled")
+                guard let url = AudioClipLibrary.url(for: question, genreSlug: slug) else {
+                    Issue.record("\(question.id)'s clip \(question.mediaFileName ?? "nil") isn't bundled")
+                    continue
+                }
+                // Not just "the file exists" — actually decode it through the
+                // same AVAudioPlayer AudioDirector.playClip uses in production,
+                // so a corrupt/mistranscoded clip fails here instead of
+                // silently no-op-ing (AudioDirector's catch swallows the
+                // error) in a real game.
+                do {
+                    let player = try AVAudioPlayer(contentsOf: url)
+                    #expect(player.duration > 0, "\(question.id)'s clip decoded but has zero duration")
+                } catch {
+                    Issue.record("\(question.id)'s clip \(url.lastPathComponent) failed to decode: \(error)")
+                }
             }
             #expect(SeedQuestions.packs[slug]?.count == questions.count)
         }
@@ -333,8 +356,9 @@ struct GenreBatch2EngineTests {
         let engine = harness.engine
         engine.botRoll = { 0.99 }
         engine.startGame(seed: 7, pack: pack)
-        // Round 2 (2026-07-27) grew each of these packs from 30 to 60.
-        #expect(engine.questions.count == 60)
+        // Round 2 (2026-07-27) grew each of these packs from 30 to 60;
+        // round 3 (2026-08-01) grew them again to 90.
+        #expect(engine.questions.count == 90)
         let question = try #require(engine.currentQuestion)
         engine.submitUserAnswer(optionID: try #require(question.correctOptionID))
         #expect(engine.userPlayer?.score == 1)
@@ -794,27 +818,31 @@ struct TeamRelayTests {
     }
 }
 
-/// Herd Reveal: any genre's normally-authored questions, scored by whoever
-/// matched the car's *majority pick* — not whoever was objectively right.
+/// Would You Rather: purely social — every non-driver seat votes, a pie
+/// chart's worth of vote tally is recorded, nobody scores, and the round
+/// ends with no winner declared. Replaces the old Herd Reveal mode.
 @MainActor
-struct HerdRevealTests {
+struct WouldYouRatherModeTests {
     let session = PartySession()
     let hostID = UUID()
     let riderID = UUID()
     let backseatID = UUID()
+    let driverID = UUID()
 
     private func startParty(deck: [TriviaQuestion]) {
         session.suppressesNetworking = true
         session.revealDuration = .zero
         session.nobodyConnectedDelay = .zero
-        session.dealDeck = { _ in (deck, "movie-quote-mashup", "movie-quote-mashup") }
-        let config = PartyConfig(modeSlug: HerdReveal.modeSlug, modeName: "Herd Reveal",
-                                 genreSlug: "movie-quote-mashup", genreName: "movie-quote-mashup",
+        session.dealDeck = { _ in (deck, WouldYouRatherMode.genreSlug, WouldYouRatherMode.genreName) }
+        let config = PartyConfig(modeSlug: WouldYouRatherMode.modeSlug, modeName: "Would You Rather",
+                                 genreSlug: WouldYouRatherMode.genreSlug, genreName: WouldYouRatherMode.genreName,
                                  difficulty: .familyMix, minPlayers: 3)
         session.host(partyName: "Testers", code: "1234", config: config,
                      playerID: hostID, playerName: "Pilot")
         session.debugApplyIntent(.hello(playerID: riderID, name: "Rider"))
         session.debugApplyIntent(.hello(playerID: backseatID, name: "Backseat"))
+        session.debugApplyIntent(.hello(playerID: driverID, name: "Driver"))
+        session.assignRole(.pilot, to: driverID)
         session.startRide()
         session.startTrip()
     }
@@ -827,28 +855,61 @@ struct HerdRevealTests {
         }
     }
 
-    @Test func popularWrongAnswerScoresCorrectAndTheObjectivelyRightMinorityLoses() async throws {
-        startParty(deck: SeedQuestions.movieQuoteMashup)
+    @Test func votesAreTalliedAndNobodyScoresOrStrikesOut() async throws {
+        startParty(deck: SeedQuestions.wouldYouRather)
         let question = try #require(session.state?.round?.questions.first)
-        let objectivelyCorrect = try #require(question.correctOptionID)
-        let popularButWrong = try #require(question.options.first { $0.id != objectivelyCorrect })
 
-        // 2-1 split: the majority is objectively wrong per the question's
-        // authored answer, but Herd Reveal scores the vote, not the truth.
-        answer(hostID, popularButWrong.id)
-        answer(riderID, popularButWrong.id)
-        answer(backseatID, objectivelyCorrect)
+        // 2-1 split among the non-driver seats.
+        answer(hostID, question.options[2].id)
+        answer(riderID, question.options[2].id)
+        answer(backseatID, question.options[4].id)
 
         let state = try #require(session.state)
-        #expect(state.round?.resolvedCorrectOptionID == popularButWrong.id)
-        #expect(state.round?.resolvedCorrectOptionID != objectivelyCorrect)
-        #expect(state.player(hostID)?.score == 1)
-        #expect(state.player(hostID)?.lastAnswerCorrect == true)
-        #expect(state.player(riderID)?.score == 1)
-        // Backseat picked the *actually* correct answer and still strikes
-        // out, because it lost the popular vote.
-        #expect(state.player(backseatID)?.strikes == 1)
-        #expect(state.player(backseatID)?.lastAnswerCorrect == false)
+        #expect(state.round?.revealing == true)
+        // Purely social: no correct answer is ever resolved…
+        #expect(state.round?.resolvedCorrectOptionID == nil)
+        // …but the real vote distribution is still recorded for the chart.
+        #expect(state.round?.voteCounts[question.options[2].id] == 2)
+        #expect(state.round?.voteCounts[question.options[4].id] == 1)
+        // Nobody scores, nobody strikes out — this mode is scoreless.
+        #expect(state.player(hostID)?.score == 0)
+        #expect(state.player(riderID)?.score == 0)
+        #expect(state.player(backseatID)?.score == 0)
+        #expect(state.player(backseatID)?.strikes == 0)
+    }
+
+    @Test func driverIsExcludedFromTheAnswerGateOnEveryQuestion() async throws {
+        startParty(deck: SeedQuestions.wouldYouRather)
+        let question = try #require(session.state?.round?.questions.first)
+
+        // The driver's tap is a no-op — never counted, never blocks the
+        // reveal from happening once the other three seats answer.
+        answer(driverID, question.options[0].id)
+        answer(hostID, question.options[0].id)
+        answer(riderID, question.options[0].id)
+        answer(backseatID, question.options[0].id)
+
+        let state = try #require(session.state)
+        #expect(state.round?.revealing == true)
+        #expect(state.player(driverID)?.score == 0)
+        #expect(state.round?.voteCounts.values.reduce(0, +) == 3)
+    }
+
+    @Test func roundEndsWithNoWinnerAndAVoteHistoryForTheRecap() async throws {
+        let deck = Array(SeedQuestions.wouldYouRather.prefix(2))
+        startParty(deck: deck)
+
+        for question in deck {
+            answer(hostID, question.options[0].id)
+            answer(riderID, question.options[0].id)
+            answer(backseatID, question.options[1].id)
+            await session.debugWaitForAdvance()
+        }
+
+        let state = try #require(session.state)
+        #expect(state.phase == .victory)
+        #expect(state.round?.winnerID == nil)
+        #expect(state.round?.voteHistory.count == deck.count)
     }
 }
 
@@ -1105,9 +1166,9 @@ struct SixSeatPartyTests {
         var answered = 0
         // This test's stubbed dealDeck hands back the full Riddle Realm pack
         // (not the real app's truncated QuestionDeck.deal), so the safety
-        // cap has to cover the whole pack — 46 questions as of round 2
-        // (2026-07-27).
-        while session.state?.phase == .playing, answered < 50 {
+        // cap has to cover the whole pack — 76 questions as of round 3
+        // (2026-08-01).
+        while session.state?.phase == .playing, answered < 80 {
             let question = try #require(session.state?.round?.questions[
                 session.state?.round?.questionIndex ?? 0])
             let correct = try #require(question.correctOptionID)
@@ -1159,6 +1220,45 @@ struct ProgressStoreTests {
         #expect(progress2.earnedBadgeIDs.contains(BadgeCatalog.perfectRoundID))
     }
 
+    /// Regression: a device that earned "mode-mastery-herd-reveal" before
+    /// Herd Reveal was replaced by Would You Rather must load that save
+    /// without crashing or losing the badge — see
+    /// BadgeCatalog.retiredModeMasteryBadges.
+    @Test func preExistingHerdRevealBadgeLoadsWithoutCrashingAndStaysResolvable() throws {
+        let storeURL = FileManager.default.temporaryDirectory
+            .appending(path: "progress-retired-badge-test-\(UUID().uuidString).store")
+        let configuration = ModelConfiguration(url: storeURL)
+        let playerID = UUID()
+
+        // Simulate a pre-migration save: earn the badge directly, as if it
+        // happened back when Herd Reveal still existed in the catalog.
+        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
+                                            configurations: configuration)
+        container1.mainContext.insert(EarnedBadge(playerID: playerID, badgeID: BadgeCatalog.modeMasteryID("herd-reveal")))
+        try container1.mainContext.save()
+
+        // A fresh launch (today's catalog, which no longer has Herd Reveal)
+        // must load this save cleanly.
+        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
+                                            configurations: configuration)
+        let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
+        #expect(progress2.earnedBadgeIDs.contains(BadgeCatalog.modeMasteryID("herd-reveal")))
+
+        let catalog = ContentCatalog()
+        // Not in the active catalog (mode is gone)…
+        #expect(BadgeCatalog.allBadges(catalog: catalog).contains { $0.id == BadgeCatalog.modeMasteryID("herd-reveal") } == false)
+        // …but still resolvable for display, exactly what GarageView's
+        // badgesTab needs to render the row instead of crashing or
+        // silently dropping it.
+        let definition = BadgeCatalog.definition(for: BadgeCatalog.modeMasteryID("herd-reveal"), catalog: catalog)
+        #expect(definition?.title == "Herd Reveal Champ")
+
+        // Would You Rather itself never generates a mode-mastery badge (no
+        // win condition) — confirm it's excluded, not just Herd Reveal's
+        // absence.
+        #expect(BadgeCatalog.allBadges(catalog: catalog).contains { $0.id == BadgeCatalog.modeMasteryID(WouldYouRatherMode.modeSlug) } == false)
+    }
+
     /// Expanded avatar customization (hair/face mark/head shape): equipping
     /// each new category persists across a relaunch exactly like the
     /// original hat/accessory/sticker categories do.
@@ -1207,9 +1307,10 @@ struct ProgressStoreTests {
 
         var answered = 0
         // engine.startGame(seed:) defaults to the full Riddle Realm pack,
-        // which round 2 (2026-07-27) grew to 46 questions — the safety cap
-        // has to cover the whole pack for this to reach victory.
-        while engine.phase == .playing, answered < 50 {
+        // which round 2 (2026-07-27) grew to 46 questions and round 3
+        // (2026-08-01) grew again to 76 — the safety cap has to cover the
+        // whole pack for this to reach victory.
+        while engine.phase == .playing, answered < 80 {
             let question = try #require(engine.currentQuestion)
             engine.submitUserAnswer(optionID: question.correctOptionID ?? question.options[0].id)
             await engine.waitForPendingAdvance()
@@ -1521,13 +1622,13 @@ struct PlayAnotherRoundTests {
 
         let riddles = SeedQuestions.riddleRealm
         session.dealDeck = { _ in (riddles, "riddle-realm", "Riddle Realm") }
-        let newConfig = PartyConfig(modeSlug: HerdReveal.modeSlug, modeName: "Herd Reveal",
+        let newConfig = PartyConfig(modeSlug: CopilotsCurveball.modeSlug, modeName: "Copilot's Curveball",
                                     genreSlug: "riddle-realm", genreName: "Riddle Realm",
                                     difficulty: .familyMix, minPlayers: 2)
         session.playAnotherRound(config: newConfig)
 
         #expect(session.state?.phase == .playing)
-        #expect(session.state?.config.modeSlug == HerdReveal.modeSlug)
+        #expect(session.state?.config.modeSlug == CopilotsCurveball.modeSlug)
         #expect(session.state?.round?.genreSlug == "riddle-realm")
         #expect(session.state?.round?.questions.first?.id == riddles.first?.id)
     }
@@ -1817,33 +1918,6 @@ struct AllAboardTests {
         #expect(session.state?.round?.teamTurnPlayerID == [riderID, fourthID])
     }
 
-    @Test func herdRevealGroupBonusFiresWhenTheWholeCarVotesTheSameWay() async throws {
-        startParty(modeSlug: HerdReveal.modeSlug, deck: SeedQuestions.movieQuoteMashup, minPlayers: 3)
-        let deck = try #require(session.state?.round?.questions)
-
-        // Herd Reveal scores by majority vote — everyone picking the same
-        // option keeps every one of these questions trivially "correct".
-        for index in 0..<4 {
-            let pick = deck[index].options[0].id
-            answer(hostID, pick)
-            answer(riderID, pick)
-            answer(backseatID, pick)
-            await session.debugWaitForAdvance()
-        }
-
-        // Unanimous vote on the All Aboard question: in Herd Reveal,
-        // "everyone correct" and "the car agreed" are the same condition,
-        // since correctness there IS agreement with the group — no special
-        // casing needed for the two mechanics not to conflict.
-        let pick = try #require(deck[4].options.first?.id)
-        answer(hostID, pick)
-        answer(riderID, pick)
-        answer(backseatID, pick)
-
-        #expect(session.state?.round?.revealing == true)
-        #expect(session.state?.player(hostID)?.score == 4 + 1 + AllAboard.groupBonus)
-        #expect(session.state?.player(riderID)?.score == 4 + 1 + AllAboard.groupBonus)
-    }
 }
 
 /// The cadence math itself, including the Double or Nothing exemption when
@@ -1862,6 +1936,15 @@ struct AllAboardCadenceTests {
         // Double or Nothing.
         #expect(AllAboard.isActive(4, modeSlug: DoubleOrNothing.modeSlug) == true)
         #expect(AllAboard.isActive(3, modeSlug: "three-strikes") == false)
+    }
+
+    /// Would You Rather already has every non-driver seat voting on every
+    /// question by design — All Aboard's cadence never fires for it, on any
+    /// index, not even the ones that would normally trigger it.
+    @Test func excludesWouldYouRatherEntirely() {
+        #expect(AllAboard.isActive(4, modeSlug: WouldYouRatherMode.modeSlug) == false)
+        #expect(AllAboard.isActive(9, modeSlug: WouldYouRatherMode.modeSlug) == false)
+        #expect(AllAboard.isAllAboardIndex(4) == true, "index 4 would fire for any other mode")
     }
 }
 
