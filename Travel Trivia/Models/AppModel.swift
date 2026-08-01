@@ -179,6 +179,19 @@ final class AppModel {
         if arguments.contains("-TTGarage") {
             route = .garage
         }
+        // -TTGarageShowcase: equips a handful of the free (price-0) cosmetics
+        // instead of the bare defaults, so My Garage screenshots don't lean
+        // entirely on the still-locked paid catalog (screenshot shortcut).
+        if arguments.contains("-TTGarageShowcase") {
+            progress.equipHair("hair-mohawk")
+            progress.equipHat("hat-cap")
+            progress.equipAccessory("acc-shades")
+            progress.equipSticker("sticker-star")
+            progress.equipCarColor("car-lime")
+            progress.equipCarDecal("decal-flames")
+            progress.equipCarAccessory("cartop-surfboard")
+            route = .garage
+        }
         if arguments.contains("-TTPractice") || arguments.contains("-TTAutoStart")
             || arguments.contains("-TTVictory") {
             route = .practice

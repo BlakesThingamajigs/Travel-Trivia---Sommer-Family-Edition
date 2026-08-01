@@ -15,11 +15,23 @@ import SwiftUI
 
 struct GarageView: View {
     @Environment(AppModel.self) private var app
-    @State private var tab: Tab = .avatar
+    @State private var tab: Tab
 
     private enum Tab: String, CaseIterable, Identifiable {
         case avatar = "AVATAR", car = "MY GARAGE", badges = "BADGES"
         var id: String { rawValue }
+    }
+
+    init() {
+        // -TTGarageCar: opens My Garage straight to the car tab (screenshot
+        // shortcut, mirrors -TTGarage itself).
+        var initialTab = Tab.avatar
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-TTGarageCar") {
+            initialTab = .car
+        }
+        #endif
+        _tab = State(initialValue: initialTab)
     }
 
     var body: some View {
