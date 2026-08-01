@@ -24,11 +24,26 @@ struct PlayAnotherRoundPicker: View {
     @State private var selectedMode: GameMode?
     @State private var selectedGenre: TriviaGenre?
 
+    /// Mirrors CreateGameFlow: Would You Rather always plays its own genre,
+    /// so genre selection is skipped here too.
+    private var isWouldYouRatherFlow: Bool {
+        selectedMode?.slug == WouldYouRatherMode.modeSlug
+    }
+    private var displayStepIndex: Int {
+        guard isWouldYouRatherFlow else { return step.rawValue }
+        switch step {
+        case .mode: return 0
+        case .difficulty: return 1
+        case .genre: return step.rawValue
+        }
+    }
+    private var displayStepCount: Int { isWouldYouRatherFlow ? 2 : 3 }
+
     var body: some View {
         VStack(spacing: 14) {
             FlowHeader(title: headerTitle, onBack: goBack)
                 .padding(.horizontal, 20)
-            StickerChip(text: "STEP \(step.rawValue + 1) OF 3", textSize: 11)
+            StickerChip(text: "STEP \(displayStepIndex + 1) OF \(displayStepCount)", textSize: 11)
 
             if step == .mode {
                 Button(action: keepCurrentAndStart) {
@@ -61,7 +76,7 @@ struct PlayAnotherRoundPicker: View {
         switch step {
         case .mode: onCancel()
         case .genre: step = .mode
-        case .difficulty: step = .genre
+        case .difficulty: step = isWouldYouRatherFlow ? .mode : .genre
         }
     }
 
@@ -71,7 +86,12 @@ struct PlayAnotherRoundPicker: View {
                 ForEach(app.catalog.modes) { mode in
                     ModeCard(mode: mode) {
                         selectedMode = mode
-                        step = .genre
+                        if mode.slug == WouldYouRatherMode.modeSlug {
+                            selectedGenre = app.catalog.genre(slug: WouldYouRatherMode.genreSlug)
+                            step = .difficulty
+                        } else {
+                            step = .genre
+                        }
                     }
                 }
             }

@@ -7,10 +7,8 @@
 //  Badges collection that unlocks them. Everything here is local-only
 //  SwiftData (ProgressStore) — never leaves the device.
 //
-//  DRAFT catalog: the specific cosmetic/badge list here is this session's
-//  proposal, not a confirmed design spec — see CosmeticCatalog and
-//  BadgeCatalog for the actual items, and the session report for the
-//  flag Blake should review.
+//  Confirmed catalog: see CosmeticCatalog and BadgeCatalog for the actual
+//  items.
 //
 
 import SwiftUI
@@ -119,9 +117,16 @@ struct GarageView: View {
     // MARK: - Badges tab
 
     private var badgesTab: some View {
-        let badges = BadgeCatalog.allBadges(catalog: app.catalog)
+        let active = BadgeCatalog.allBadges(catalog: app.catalog)
+        // Retired mode-mastery badges (e.g. Herd Reveal, replaced by Would
+        // You Rather) aren't offered as a goal to anyone new, but a device
+        // that already earned one keeps seeing it rather than it silently
+        // vanishing from My Garage.
+        let earnedRetired = BadgeCatalog.retiredModeMasteryBadges()
+            .filter { app.progress.earnedBadgeIDs.contains($0.id) }
+        let badges = active + earnedRetired
         return VStack(spacing: 10) {
-            StickerChip(text: "\(app.progress.earnedBadgeIDs.count) / \(badges.count) EARNED",
+            StickerChip(text: "\(app.progress.earnedBadgeIDs.count) / \(active.count) EARNED",
                         fill: TT.sunshine, textSize: 12)
                 .accessibilityIdentifier("badge-earned-count")
             ForEach(badges) { badge in

@@ -69,7 +69,9 @@ nonisolated struct TriviaQuestion: Identifiable, Equatable, Codable, Sendable {
 }
 
 /// The "majority vote becomes correct" resolver behind Would You Rather —
-/// deliberately genre/mode-agnostic so Herd Reveal can reuse it as-is.
+/// deliberately genre/mode-agnostic. Also backs any other genre's
+/// prediction-style (`correctOptionID == nil`) content played under a
+/// different mode.
 nonisolated enum MajorityVote {
     /// The option that received the most votes; ties break toward the
     /// earlier option in display order so every device agrees. Nil when

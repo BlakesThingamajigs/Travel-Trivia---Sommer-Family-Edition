@@ -395,6 +395,7 @@ final class PartySession: NSObject {
         guard isHost, var s = state, s.phase == .ride, var round = s.pausedRound else { return }
         round.revealing = false
         round.resolvedCorrectOptionID = nil
+        round.voteCounts = [:]
         s.round = round
         s.pausedRound = nil
         s.phase = .playing
@@ -583,6 +584,12 @@ final class PartySession: NSObject {
     private var answerGate: [UUID] {
         guard let s = state, s.phase == .playing, let round = s.round,
               !round.revealing, !round.curveballPreview, !round.wagerOpen else { return [] }
+        // Would You Rather: every non-driver seat votes on every question,
+        // same seat exclusion All Aboard uses to keep the driver hands-free
+        // — software-enforced here too, not just a house rule.
+        if s.config.modeSlug == WouldYouRatherMode.modeSlug {
+            return allAboardGate(s)
+        }
         if AllAboard.isActive(round.questionIndex, modeSlug: s.config.modeSlug) {
             return allAboardGate(s)
         }
@@ -646,18 +653,16 @@ final class PartySession: NSObject {
               round.questions.indices.contains(round.questionIndex) else { return }
         let question = round.questions[round.questionIndex]
 
+        let isWouldYouRatherMode = s.config.modeSlug == WouldYouRatherMode.modeSlug
+
         // Authored questions grade against their fixed answer; prediction
-        // questions (Would You Rather) grade against whichever option won
-        // the car's vote — and Herd Reveal forces that same majority path
-        // even when the question does have an authored answer, since the
-        // whole point of the mode is scoring popularity, not correctness.
-        let correctID: String?
-        if s.config.modeSlug == HerdReveal.modeSlug {
-            correctID = MajorityVote.winningOptionID(votes: pendingAnswers.values, options: question.options)
-        } else {
-            correctID = question.correctOptionID
+        // questions (Would You Rather genre content, playable under any
+        // mode) grade against whichever option won the car's vote. Would
+        // You Rather mode itself is purely social — no correct answer, no
+        // scoring, just the vote tally below.
+        let correctID: String? = isWouldYouRatherMode ? nil
+            : question.correctOptionID
                 ?? MajorityVote.winningOptionID(votes: pendingAnswers.values, options: question.options)
-        }
 
         // Double or Nothing: every Nth question settles against the
         // player's wager instead of the flat +1/strike — correct doubles
@@ -671,32 +676,47 @@ final class PartySession: NSObject {
         // gets knocked down by the first miss below.
         var allAboardEveryoneCorrect = isAllAboardQuestion && !pendingAnswers.isEmpty
 
-        for i in s.players.indices {
-            guard let answer = pendingAnswers[s.players[i].id] else { continue }
-            let correct = answer == correctID
-            s.players[i].lastAnswerCorrect = correct
-            if isWagerQuestion {
-                let wager = s.players[i].pendingWager ?? 0
-                s.players[i].score = correct ? s.players[i].score + wager
-                                              : max(0, s.players[i].score - wager)
-                s.players[i].pendingWager = nil
-            } else if correct {
-                s.players[i].score += 1
-            } else {
-                s.players[i].strikes += 1
+        if isWouldYouRatherMode {
+            for i in s.players.indices where pendingAnswers[s.players[i].id] != nil {
+                s.players[i].lastAnswerCorrect = nil
             }
-            if isAllAboardQuestion, !correct {
-                allAboardEveryoneCorrect = false
+        } else {
+            for i in s.players.indices {
+                guard let answer = pendingAnswers[s.players[i].id] else { continue }
+                let correct = answer == correctID
+                s.players[i].lastAnswerCorrect = correct
+                if isWagerQuestion {
+                    let wager = s.players[i].pendingWager ?? 0
+                    s.players[i].score = correct ? s.players[i].score + wager
+                                                  : max(0, s.players[i].score - wager)
+                    s.players[i].pendingWager = nil
+                } else if correct {
+                    s.players[i].score += 1
+                } else {
+                    s.players[i].strikes += 1
+                }
+                if isAllAboardQuestion, !correct {
+                    allAboardEveryoneCorrect = false
+                }
+            }
+            if isAllAboardQuestion, allAboardEveryoneCorrect {
+                for i in s.players.indices where pendingAnswers[s.players[i].id] != nil {
+                    s.players[i].score += AllAboard.groupBonus
+                }
             }
         }
-        if isAllAboardQuestion, allAboardEveryoneCorrect {
-            for i in s.players.indices where pendingAnswers[s.players[i].id] != nil {
-                s.players[i].score += AllAboard.groupBonus
-            }
+
+        var voteCounts: [String: Int] = [:]
+        if isWouldYouRatherMode {
+            for vote in pendingAnswers.values { voteCounts[vote, default: 0] += 1 }
         }
         pendingAnswers = [:]
         s.round?.revealing = true
         s.round?.resolvedCorrectOptionID = correctID
+        s.round?.voteCounts = voteCounts
+        if isWouldYouRatherMode {
+            s.round?.voteHistory.append(voteCounts)
+        }
         commit(s)
         scheduleAdvance(after: revealDuration)
     }
@@ -717,6 +737,7 @@ final class PartySession: NSObject {
         }
         s.round?.revealing = false
         s.round?.resolvedCorrectOptionID = nil
+        s.round?.voteCounts = [:]
         progressRoundOrFinish(&s)
         commit(s)
         holdIfNobodyCanAnswer()
@@ -819,6 +840,14 @@ final class PartySession: NSObject {
     private func finishRound(_ s: inout PartyState) {
         if s.config.modeSlug == TeamRelay.modeSlug {
             finishTeamRelayRound(&s)
+            return
+        }
+        if s.config.modeSlug == WouldYouRatherMode.modeSlug {
+            // Purely social — nobody scored, so nobody wins. The Victory
+            // screen shows the round's recap highlights instead of a
+            // winner (see VictoryView, driven off `round.voteHistory`).
+            s.round?.winnerID = nil
+            s.phase = .victory
             return
         }
         // Same rules as the practice engine: last one standing, else score,

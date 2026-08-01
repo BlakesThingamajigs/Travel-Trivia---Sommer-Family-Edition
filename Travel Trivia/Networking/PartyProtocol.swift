@@ -176,6 +176,11 @@ nonisolated enum AllAboard {
     /// +wager/-wager scoring doesn't map onto a flat individual-correct
     /// group bonus, so the wager question just plays as itself.
     static func isActive(_ questionIndex: Int, modeSlug: String) -> Bool {
+        // Would You Rather already has every non-driver seat voting on every
+        // question by design (see WouldYouRatherMode) — layering All
+        // Aboard's cadence/group-bonus on top has no meaning there (no
+        // scoring, no "everyone correct" concept) and would be redundant.
+        if modeSlug == WouldYouRatherMode.modeSlug { return false }
         guard isAllAboardIndex(questionIndex) else { return false }
         if modeSlug == DoubleOrNothing.modeSlug, DoubleOrNothing.isWagerIndex(questionIndex) {
             return false
@@ -195,10 +200,18 @@ nonisolated enum RoundLength {
     static let minQuestionsBeforeSuddenDeath = 15
 }
 
-/// Herd Reveal rules: any genre's normally-authored questions, scored by
-/// whichever answer won the car's vote instead of the authored answer.
-nonisolated enum HerdReveal {
-    static let modeSlug = "herd-reveal"
+/// Would You Rather rules: this mode always plays the "would-you-rather"
+/// genre (genre selection is skipped in Create Game/Play Another Round —
+/// see CreateGameFlow/PlayAnotherRoundPicker), reuses the same
+/// MajorityVote resolver every prediction question already relies on, and
+/// is purely social — no correct answer, no scoring, no winner. Replaces
+/// Herd Reveal, which is no longer part of the mode catalog; the generic
+/// "run majority-vote scoring against any genre" behavior Herd Reveal
+/// offered is intentionally not preserved anywhere else.
+nonisolated enum WouldYouRatherMode {
+    static let modeSlug = "would-you-rather"
+    static let genreSlug = "would-you-rather"
+    static let genreName = "Would You Rather"
 }
 
 /// Double or Nothing rules, shared by host logic and every screen.
@@ -224,6 +237,15 @@ nonisolated struct RoundState: Codable, Equatable, Sendable {
     /// answer, or the majority pick for prediction questions. Nil outside
     /// the reveal (and when literally nobody voted).
     var resolvedCorrectOptionID: String?
+    /// Would You Rather: vote tally for the question currently revealing —
+    /// option id to number of votes it got. Empty outside the reveal (and
+    /// for every mode besides Would You Rather).
+    var voteCounts: [String: Int] = [:]
+    /// Would You Rather: one entry per question resolved so far this round,
+    /// in play order — the source data for the end-of-round recap
+    /// highlights (Most Split Vote / Most Agreed-Upon). Empty for every
+    /// other mode.
+    var voteHistory: [[String: Int]] = []
     /// Copilot's Curveball: the current question is inside its early-reveal
     /// window — only the copilot's device shows it, and no answers are
     /// accepted yet.

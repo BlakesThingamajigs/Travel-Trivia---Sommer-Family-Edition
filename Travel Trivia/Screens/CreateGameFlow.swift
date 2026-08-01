@@ -24,11 +24,32 @@ struct CreateGameFlow: View {
     @State private var partyName = ""
     @State private var code = String(Int.random(in: 1000...9999))
 
+    /// Would You Rather always plays its own genre — genre selection is
+    /// skipped for this mode only (see CreateGameFlow's file header /
+    /// WouldYouRatherMode).
+    private var isWouldYouRatherFlow: Bool {
+        selectedMode?.slug == WouldYouRatherMode.modeSlug
+    }
+
+    /// Step numbering collapses to 3 steps (mode/difficulty/name) when the
+    /// genre step is skipped, so "STEP X OF Y" stays accurate instead of
+    /// jumping from 1 to 3.
+    private var displayStepIndex: Int {
+        guard isWouldYouRatherFlow else { return step.rawValue }
+        switch step {
+        case .mode: return 0
+        case .difficulty: return 1
+        case .name: return 2
+        case .genre: return step.rawValue
+        }
+    }
+    private var displayStepCount: Int { isWouldYouRatherFlow ? 3 : 4 }
+
     var body: some View {
         VStack(spacing: 14) {
             FlowHeader(title: headerTitle, onBack: goBack)
                 .padding(.horizontal, 20)
-            StickerChip(text: "STEP \(step.rawValue + 1) OF 4", textSize: 11)
+            StickerChip(text: "STEP \(displayStepIndex + 1) OF \(displayStepCount)", textSize: 11)
 
             switch step {
             case .mode: modeStep
@@ -54,7 +75,7 @@ struct CreateGameFlow: View {
         switch step {
         case .mode: app.route = .menu
         case .genre: step = .mode
-        case .difficulty: step = .genre
+        case .difficulty: step = isWouldYouRatherFlow ? .mode : .genre
         case .name: step = .difficulty
         }
     }
@@ -67,7 +88,12 @@ struct CreateGameFlow: View {
                 ForEach(app.catalog.modes) { mode in
                     ModeCard(mode: mode) {
                         selectedMode = mode
-                        step = .genre
+                        if mode.slug == WouldYouRatherMode.modeSlug {
+                            selectedGenre = app.catalog.genre(slug: WouldYouRatherMode.genreSlug)
+                            step = .difficulty
+                        } else {
+                            step = .genre
+                        }
                     }
                 }
             }
@@ -159,8 +185,10 @@ struct CreateGameFlow: View {
                         fill: TT.tangerine, textColor: .white, textSize: 10)
             // Shuffle Genres (Settings) rerolls the genre when the trip
             // actually deals — showing the genre picked here would be
-            // misleading about what's actually about to play.
-            StickerChip(text: app.profile.shuffleGenres ? "SHUFFLED EACH GAME" : selectedGenre?.displayName.uppercased() ?? "",
+            // misleading about what's actually about to play. Would You
+            // Rather always plays its own genre regardless of that setting.
+            StickerChip(text: isWouldYouRatherFlow ? selectedGenre?.displayName.uppercased() ?? ""
+                        : (app.profile.shuffleGenres ? "SHUFFLED EACH GAME" : selectedGenre?.displayName.uppercased() ?? ""),
                         fill: TT.grape, textColor: .white, textSize: 10)
             StickerChip(text: selectedDifficulty?.displayName.uppercased() ?? "",
                         fill: TT.lime, textColor: .white, textSize: 10)

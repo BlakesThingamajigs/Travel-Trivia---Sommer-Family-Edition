@@ -44,6 +44,10 @@ final class GameEngine {
     /// authored answer, or the party's majority pick for prediction
     /// questions. Nil outside the reveal.
     private(set) var revealedCorrectOptionID: String?
+    /// Would You Rather: vote tally for the question currently revealing —
+    /// mirrors `RoundState.voteCounts`. Empty outside the reveal and for
+    /// every other mode.
+    private(set) var revealedVoteCounts: [String: Int] = [:]
     private(set) var winner: Player?
     private(set) var playContext: PlayContext = .practice
     /// Genre chip on the riddle card; party games sync the real one.
@@ -135,9 +139,9 @@ final class GameEngine {
     }
     var localPlayerIsCopilot: Bool { userPlayer?.role == .copilot }
 
-    // MARK: - Herd Reveal / Team Relay / Double or Nothing
+    // MARK: - Would You Rather / Team Relay / Double or Nothing
 
-    var isHerdRevealMode: Bool { activeModeSlug == HerdReveal.modeSlug }
+    var isWouldYouRatherMode: Bool { activeModeSlug == WouldYouRatherMode.modeSlug }
     var isTeamRelayMode: Bool { activeModeSlug == TeamRelay.modeSlug }
     var isDoubleOrNothingMode: Bool { activeModeSlug == DoubleOrNothing.modeSlug }
     var currentQuestionIsWager: Bool {
@@ -291,7 +295,7 @@ final class GameEngine {
               !curveballPreviewActive,
               !wagerWindowActive,
               isMyTurnInTeamRelay,
-              !(currentQuestionIsAllAboard && localPlayerIsDriver),
+              !((currentQuestionIsAllAboard || isWouldYouRatherMode) && localPlayerIsDriver),
               userPickedOptionID == nil,
               let user = userPlayer, !user.isOut,
               let question = currentQuestion,
@@ -461,7 +465,11 @@ final class GameEngine {
                 progress.award(BadgeCatalog.comebackID)
             }
         }
-        if !questions.isEmpty, user.strikes == 0 {
+        // Would You Rather never assigns strikes (no scoring at all), which
+        // would make "zero strikes" trivially true for every player, every
+        // round — not a real achievement there, so it's excluded rather
+        // than handed out for free.
+        if !questions.isEmpty, user.strikes == 0, !isWouldYouRatherMode {
             progress.award(BadgeCatalog.perfectRoundID)
         }
     }
@@ -504,6 +512,7 @@ final class GameEngine {
         turnState = .awaitingAnswer
         userPickedOptionID = nil
         revealedCorrectOptionID = nil
+        revealedVoteCounts = [:]
         winner = nil
         activeGenreName = "Riddle Realm"
         activeGenreSlug = "riddle-realm"
@@ -538,6 +547,7 @@ final class GameEngine {
             activeGenreName = round.genreName
             activeGenreSlug = round.genreSlug
             revealedCorrectOptionID = round.resolvedCorrectOptionID
+            revealedVoteCounts = round.voteCounts
             curveballPreviewActive = round.curveballPreview
             wagerWindowActive = round.wagerOpen
             teamTurnPlayerIDs = round.teamTurnPlayerID
@@ -547,6 +557,7 @@ final class GameEngine {
             questionIndex = 0
             turnState = .awaitingAnswer
             revealedCorrectOptionID = nil
+            revealedVoteCounts = [:]
             curveballPreviewActive = false
             wagerWindowActive = false
             teamTurnPlayerIDs = [nil, nil]

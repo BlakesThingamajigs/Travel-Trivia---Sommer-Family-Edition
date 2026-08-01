@@ -34,7 +34,7 @@ nonisolated struct GameMode: Identifiable, Equatable, Codable, Sendable {
     var isPlayable: Bool {
         switch slug {
         case "three-strikes", CopilotsCurveball.modeSlug, Elimination.bracketModeSlug,
-             TeamRelay.modeSlug, HerdReveal.modeSlug, DoubleOrNothing.modeSlug:
+             TeamRelay.modeSlug, WouldYouRatherMode.modeSlug, DoubleOrNothing.modeSlug:
             true
         default:
             false
@@ -156,7 +156,7 @@ final class ContentCatalog {
                  minPlayers: 4, requiresEvenPlayers: true, isTeamBased: true),
         GameMode(slug: "copilots-curveball", displayName: "Copilot's Curveball",
                  minPlayers: 2, requiresEvenPlayers: false, isTeamBased: false),
-        GameMode(slug: "herd-reveal", displayName: "Herd Reveal",
+        GameMode(slug: WouldYouRatherMode.modeSlug, displayName: WouldYouRatherMode.genreName,
                  minPlayers: 3, requiresEvenPlayers: false, isTeamBased: false),
         GameMode(slug: "double-or-nothing", displayName: "Double or Nothing",
                  minPlayers: 2, requiresEvenPlayers: false, isTeamBased: false),

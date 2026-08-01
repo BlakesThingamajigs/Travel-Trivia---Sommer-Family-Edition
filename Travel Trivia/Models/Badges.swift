@@ -2,8 +2,7 @@
 //  Badges.swift
 //  Travel Trivia
 //
-//  DRAFT badge list — proposed starter set, not a confirmed design spec
-//  (flagged in the session report). Badges are earned by the local player
+//  Badge list — confirmed design. Badges are earned by the local player
 //  only (no accounts for non-host riders, so "party-wide" isn't
 //  representable without breaking the no-account model) and persist
 //  forever on this device once earned — pure achievements, tracked in My
@@ -41,9 +40,8 @@ struct BadgeDefinition: Identifiable, Equatable {
     let fill: Color
 }
 
-/// DRAFT badge catalog (proposed by this session, not previously itemized
-/// in the design vault — see the session report). Five badge *types*;
-/// genre completion and mode mastery expand to one badge per genre/mode.
+/// Confirmed badge catalog. Five badge *types*; genre completion and mode
+/// mastery expand to one badge per genre/mode.
 enum BadgeCatalog {
     static func genreCompletionID(_ genreSlug: String) -> String { "genre-complete-\(genreSlug)" }
     static func modeMasteryID(_ modeSlug: String) -> String { "mode-mastery-\(modeSlug)" }
@@ -60,13 +58,30 @@ enum BadgeCatalog {
         }
     }
 
+    /// One per mode with a real win condition. Would You Rather is
+    /// deliberately excluded — it's scoreless and declares no winner, so
+    /// "win a game of Would You Rather" is undefined.
     static func modeMasteryBadges(catalog: ContentCatalog) -> [BadgeDefinition] {
-        catalog.modes.map {
-            BadgeDefinition(id: modeMasteryID($0.slug),
-                             title: "\($0.displayName) Champ",
-                             subtitle: "Win a game of \($0.displayName)",
-                             fill: TT.grape)
-        }
+        catalog.modes
+            .filter { $0.slug != WouldYouRatherMode.modeSlug }
+            .map {
+                BadgeDefinition(id: modeMasteryID($0.slug),
+                                 title: "\($0.displayName) Champ",
+                                 subtitle: "Win a game of \($0.displayName)",
+                                 fill: TT.grape)
+            }
+    }
+
+    /// Mode-mastery badges for modes retired from the mode-select catalog.
+    /// Not part of `allBadges`/`modeMasteryBadges` (never shown as an
+    /// earnable goal, never re-awarded — PartySession no longer emits a win
+    /// for a mode `ContentCatalog.modes` doesn't contain), but kept
+    /// resolvable so a device that already has an `EarnedBadge` row for one
+    /// doesn't crash or lose that badge's display copy. Herd Reveal was
+    /// replaced by Would You Rather (see `WouldYouRatherMode`).
+    static func retiredModeMasteryBadges() -> [BadgeDefinition] {
+        [BadgeDefinition(id: modeMasteryID("herd-reveal"), title: "Herd Reveal Champ",
+                          subtitle: "Retired mode — no longer winnable", fill: TT.grape)]
     }
 
     static let perfectRound = BadgeDefinition(
@@ -85,6 +100,7 @@ enum BadgeCatalog {
     }
 
     static func definition(for id: String, catalog: ContentCatalog) -> BadgeDefinition? {
-        allBadges(catalog: catalog).first { $0.id == id }
+        if let active = allBadges(catalog: catalog).first(where: { $0.id == id }) { return active }
+        return retiredModeMasteryBadges().first { $0.id == id }
     }
 }

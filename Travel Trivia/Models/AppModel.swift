@@ -93,7 +93,11 @@ final class AppModel {
         }
         party.dealDeck = { [weak self] config in
             let genre: (slug: String, name: String)
-            if let self, profile.shuffleGenres,
+            if config.modeSlug == WouldYouRatherMode.modeSlug {
+                // Always its own genre, regardless of Shuffle Genres — the
+                // mode has no genre variety to shuffle across.
+                genre = (WouldYouRatherMode.genreSlug, WouldYouRatherMode.genreName)
+            } else if let self, profile.shuffleGenres,
                let rolled = catalog.contentReadyGenres.randomElement() {
                 genre = (rolled.slug, rolled.displayName)
             } else {

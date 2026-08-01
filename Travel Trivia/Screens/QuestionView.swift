@@ -9,6 +9,7 @@
 
 import SwiftUI
 import SwiftData
+import Charts
 
 struct QuestionView: View {
     @Environment(GameEngine.self) private var engine
@@ -54,11 +55,13 @@ struct QuestionView: View {
             && !(engine.userPlayer?.isOut ?? true)
     }
 
-    /// All Aboard: the driver never gets an answer UI, on this question or
-    /// any other — they keep calling out color + position like normal, just
-    /// with everyone else answering independently instead of one person.
+    /// All Aboard (and, identically, every Would You Rather question — see
+    /// WouldYouRatherMode): the driver never gets an answer UI, on this
+    /// question or any other — they keep calling out color + position like
+    /// normal, just with everyone else answering independently instead of
+    /// one person.
     private var isDriverDuringAllAboard: Bool {
-        engine.currentQuestionIsAllAboard && engine.localPlayerIsDriver
+        (engine.currentQuestionIsAllAboard || engine.isWouldYouRatherMode) && engine.localPlayerIsDriver
     }
 
     var body: some View {
@@ -121,6 +124,9 @@ struct QuestionView: View {
 
                 if isDriverDuringAllAboard {
                     DriverCallOutCard()
+                        .padding(.bottom, 16)
+                } else if engine.isWouldYouRatherMode && engine.turnState == .revealing {
+                    VoteDistributionPieChart(options: question.options, voteCounts: engine.revealedVoteCounts)
                         .padding(.bottom, 16)
                 } else {
                     AnswerGrid(question: question)
@@ -200,7 +206,7 @@ private struct RiddleCard: View {
                     StickerChip(text: "CURVEBALL!", fill: TT.tangerine,
                                 textColor: .white, textSize: 11)
                         .rotationEffect(.degrees(-4))
-                } else if question.isMajorityScored || engine.isHerdRevealMode {
+                } else if question.isMajorityScored {
                     StickerChip(text: "CAR VOTES", fill: TT.sky,
                                 textColor: .white, textSize: 11)
                 } else if engine.currentQuestionIsWager {
@@ -333,6 +339,65 @@ private struct DriverCallOutCard: View {
         .frame(maxWidth: .infinity, minHeight: 110)
         .sticker(RoundedRectangle(cornerRadius: 20), fill: TT.tangerine)
         .accessibilityIdentifier("driver-call-out-card")
+        .transition(.scale.combined(with: .opacity))
+    }
+}
+
+/// Would You Rather's reveal: a pie chart of how the whole car voted,
+/// standing in for the answer grid during the reveal window — there's no
+/// correct answer to highlight in this mode, just the vote split (see
+/// WouldYouRatherMode).
+private struct VoteDistributionPieChart: View {
+    var options: [AnswerOption]
+    var voteCounts: [String: Int]
+
+    private var totalVotes: Int { voteCounts.values.reduce(0, +) }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            if totalVotes > 0 {
+                Chart {
+                    ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                        let count = voteCounts[option.id] ?? 0
+                        if count > 0 {
+                            SectorMark(angle: .value("Votes", count), innerRadius: .ratio(0.55),
+                                       angularInset: 1.5)
+                                .foregroundStyle(TT.answerColors[index % TT.answerColors.count])
+                        }
+                    }
+                }
+                .frame(height: 170)
+                .accessibilityIdentifier("wyr-vote-pie-chart")
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                        let count = voteCounts[option.id] ?? 0
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(TT.answerColors[index % TT.answerColors.count])
+                                .frame(width: 12, height: 12)
+                            Text(option.text)
+                                .font(TT.font(12, .bold))
+                                .foregroundStyle(TT.ink)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            Spacer()
+                            Text("\(count)")
+                                .font(TT.font(12, .heavy))
+                                .foregroundStyle(TT.ink.opacity(0.7))
+                        }
+                    }
+                }
+            } else {
+                Text("Nobody voted!")
+                    .font(TT.font(15, .bold))
+                    .foregroundStyle(TT.ink)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .sticker(RoundedRectangle(cornerRadius: 20), fill: TT.paper)
+        .accessibilityIdentifier("wyr-vote-distribution")
         .transition(.scale.combined(with: .opacity))
     }
 }
@@ -548,8 +613,8 @@ private struct AnswerButton: View {
             Text(option.text)
                 .font(TT.font(17, .heavy))
                 .foregroundStyle(TT.ink)
-                .lineLimit(2)
-                .minimumScaleFactor(0.6)
+                .lineLimit(3)
+                .minimumScaleFactor(0.5)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 8)
                 .frame(maxWidth: .infinity, minHeight: 82)
