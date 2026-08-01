@@ -216,6 +216,34 @@ final class Travel_TriviaUITests: XCTestCase {
                        "Equipped cosmetic should still be equipped after relaunch")
     }
 
+    /// Narrator voice persona picker: on a device/simulator with no
+    /// Enhanced/Premium voices downloaded (true of every fresh sim, and the
+    /// real "not guaranteed present" case the feature is built for), every
+    /// persona row must show the needs-download state and be unselectable,
+    /// and its "SETTINGS" button must actually background this app by
+    /// opening the system Settings app — not silently no-op.
+    @MainActor
+    func testNarratorVoiceNeedsDownloadStateAndSettingsDeepLink() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTResetProgress", "-TTSkipWelcome", "-TTSettings"]
+        app.launch()
+
+        for persona in ["coPilot", "tourGuide", "adventurer", "hypeMan"] {
+            let row = app.buttons["settings-narrator-\(persona)"]
+            XCTAssertTrue(row.waitForExistence(timeout: 5))
+            XCTAssertFalse(row.isEnabled, "\(persona) has no Enhanced/Premium voice on a fresh sim — its row must be unselectable")
+        }
+
+        let openSettings = app.buttons["settings-narrator-coPilot-open-settings"]
+        XCTAssertTrue(openSettings.exists)
+        openSettings.tap()
+
+        // A real navigation out to the system Settings app, not a no-op —
+        // this app must actually resign active.
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5),
+                       "tapping SETTINGS should open the system Settings app, backgrounding Travel Trivia")
+    }
+
     /// 6-seat car: screenshots Our Ride's seat picker for a real hosted
     /// party (solo host — the layout renders all 6 seat slots regardless
     /// of how many are filled). Confirms the new 3rd row of seats actually

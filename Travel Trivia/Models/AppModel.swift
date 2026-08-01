@@ -53,7 +53,7 @@ final class AppModel {
         self.party = party
         self.progress = progress
         self.auth = auth
-        self.audio = AudioDirector(profile: profile)
+        self.audio = AudioDirector(profile: profile, progress: progress)
         audio.configureSession()
         engine.progress = progress
         #if DEBUG

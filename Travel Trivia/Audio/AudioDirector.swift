@@ -41,6 +41,7 @@ final class AudioDirector {
     private(set) var isPlayingClip = false
 
     private let profile: LocalProfile
+    private let progress: ProgressStore
     private let synthesizer = AVSpeechSynthesizer()
     private let speechDelegate = SpeechDelegate()
     private var clipPlayer: AVAudioPlayer?
@@ -54,8 +55,9 @@ final class AudioDirector {
     }
     private var pausedWork: PausedWork = .none
 
-    init(profile: LocalProfile) {
+    init(profile: LocalProfile, progress: ProgressStore) {
         self.profile = profile
+        self.progress = progress
         synthesizer.delegate = speechDelegate
         speechDelegate.onFinish = { [weak self] in
             Task { @MainActor in
@@ -131,8 +133,19 @@ final class AudioDirector {
         let utterance = AVSpeechUtterance(string: text)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95
         utterance.pitchMultiplier = 1.0
-        utterance.voice = AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
+        utterance.voice = resolvedPersonaVoice()
+            ?? AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
         synthesizer.speak(utterance)
+    }
+
+    /// Nil falls back to `speak()`'s default system voice — either no
+    /// persona is picked, or the picked persona's voice isn't (or is no
+    /// longer) downloaded on this device. Re-resolved every call rather
+    /// than cached, since voice availability can change between launches.
+    private func resolvedPersonaVoice() -> AVSpeechSynthesisVoice? {
+        guard let persona = progress.narratorVoicePreference.persona,
+              let identifier = NarratorVoiceCatalog.resolve()[persona]?.identifier else { return nil }
+        return AVSpeechSynthesisVoice(identifier: identifier)
     }
 
     // MARK: - Clip playback (Part D)

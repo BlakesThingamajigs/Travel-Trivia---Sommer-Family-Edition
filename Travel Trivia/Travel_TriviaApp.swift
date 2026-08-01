@@ -28,7 +28,7 @@ struct Travel_TriviaApp: App {
 
         let progressContainer = try! ModelContainer(
             for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self,
-            CoinWallet.self, PurchasedCosmetic.self)
+            CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self)
         self.progressContainer = progressContainer
 
         let profile = LocalProfile()
