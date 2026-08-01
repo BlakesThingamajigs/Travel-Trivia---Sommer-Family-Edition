@@ -27,6 +27,18 @@
 //  (see Audio/AudioClipLibrary.swift) is ready to stream from them without
 //  reworking this file's shape.
 //
+//  Expansion pass (2026-07-28): re-attempted Freesound/Jamendo signup —
+//  both still require an interactive account (email verification, and in
+//  Freesound's case a login-gated "apply for API access" flow) that a
+//  headless session can't complete; same fundamental blocker as before, not
+//  a temporary outage. Added ~27 more real Wikimedia Commons clips across
+//  all 3 genres this pass (12 animals, 13 SFX, 14 tunes — one tune target,
+//  Barber of Seville, was dropped when the only usable CC0 clip turned out
+//  to be a different aria from the same opera, which would have mismatched
+//  the answer text; a few SFX targets — popcorn popping, zipper — had no
+//  real recording on Commons, only pronunciation/music files, and were
+//  dropped rather than padded with a mismatch).
+//
 //  Name-that-tune deliberately uses public-domain classical pieces rather
 //  than pop songs — sidesteps the sync/performance licensing risk flagged
 //  as unresolved in 2026-07-25_question-format-and-content-sourcing.md.
@@ -69,6 +81,18 @@ nonisolated enum AudioSeedQuestions {
             "owl": "Owl",
             "rooster": "Rooster",
             "sheep": "Sheep",
+            "pig": "Pig",
+            "goat": "Goat",
+            "donkey": "Donkey",
+            "turkey": "Turkey",
+            "bee": "Bee",
+            "seagull": "Seagull",
+            "peacock": "Peacock",
+            "parakeet": "Parakeet",
+            "penguin": "Penguin",
+            "flamingo": "Flamingo",
+            "woodpecker": "Woodpecker",
+            "canary": "Canary",
         ]
         let attributions: [String: String] = [
             "cat": "\"Meow of a pleading cat.oga\" by Heismark (Public domain), via Wikimedia Commons",
@@ -84,8 +108,21 @@ nonisolated enum AudioSeedQuestions {
             "owl": "\"Strix aluco male.oga\" by Vianney Bajart (CC BY-SA 4.0), via Wikimedia Commons",
             "rooster": "\"Rooster crowing.ogg\" by Filo gèn' (CC BY-SA 4.0), via Wikimedia Commons",
             "sheep": "\"Sheep bleating.ogg\" by earthcalling (Public domain), via Wikimedia Commons",
+            "pig": "\"Mudchute pig 1.ogg\" by Secretlondon (CC BY-SA 3.0), via Wikimedia Commons",
+            "goat": "\"Herd of goats bleating.ogg\" by stephan (Public domain), via Wikimedia Commons",
+            "donkey": "\"157763 felix-blume a-donkey-is-braying-in-his-enclosure-in-south-of-france.wav\" by felix-blume (CC0), via Wikimedia Commons",
+            "turkey": "\"Meleagris gallopavo - Wild Turkey XC134155.ogg\" by Jonathon Jongsma (CC BY-SA 3.0), via Wikimedia Commons",
+            "bee": "\"Bee buzzing sound (animal noises).opus\" by Free Sounds Library User Spanac (CC BY 3.0), via Wikimedia Commons",
+            "seagull": "\"XC707075 - European Herring Gull - Larus argentatus.mp3\" by Sonothèque ADVL (CC0), via Wikimedia Commons",
+            "peacock": "\"Indian Peafowl.ogg\" by Gypsypkd (Public domain), via Wikimedia Commons",
+            "parakeet": "\"Budgerigar chirping.ogg\" by mary905 (Public domain), via Wikimedia Commons",
+            "penguin": "\"20091121 Little Penguin calls at St Kilda Breakwater.ogg\" by Mikeybear (CC BY 3.0), via Wikimedia Commons",
+            "flamingo": "\"Greater flamingo call recorded in March 2005 at Mayani, Satara.wav\" by Sharadapte (CC BY-SA 4.0), via Wikimedia Commons",
+            "woodpecker": "\"Great Spotted Woodpecker drum.ogg\" by T.Voekler (CC BY-SA 3.0), via Wikimedia Commons",
+            "canary": "\"Long-range-Order-in-Canary-Song-pcbi.1003052.s002.oga\" by Markowitz J, Ivie E, Kligler L, Gardner T (CC BY 2.5), via Wikimedia Commons",
         ]
-        let keys = ["cat", "chicken", "cow", "cricket", "cuckoo", "dog", "elephant", "frog", "horse", "lion", "owl", "rooster", "sheep"]
+        let keys = ["cat", "chicken", "cow", "cricket", "cuckoo", "dog", "elephant", "frog", "horse", "lion", "owl", "rooster", "sheep",
+                    "pig", "goat", "donkey", "turkey", "bee", "seagull", "peacock", "parakeet", "penguin", "flamingo", "woodpecker", "canary"]
         return keys.enumerated().map { index, key in
             let correctText = names[key]!
             // Deterministic distractor pick: the next 5 clips in the pool
@@ -121,6 +158,19 @@ nonisolated enum AudioSeedQuestions {
             "keyboard-typing": "Keyboard Typing",
             "police-siren": "Police Siren",
             "train-whistle": "Train Whistle",
+            "doorbell": "Doorbell",
+            "telephone-ring": "Telephone Ringing",
+            "ocean-waves": "Ocean Waves",
+            "rain": "Rain",
+            "bicycle-bell": "Bicycle Bell",
+            "vacuum-cleaner": "Vacuum Cleaner",
+            "cash-register": "Cash Register",
+            "drum-roll": "Drum Roll",
+            "referee-whistle": "Referee Whistle",
+            "typewriter": "Typewriter",
+            "scissors-snip": "Scissors Cutting",
+            "page-turning": "Page Turning",
+            "blender": "Blender",
         ]
         let attributions: [String: String] = [
             "alarm-clock": "\"Alarm clock - 01.ogg\" by Mathieu Kappler (CC BY-SA 4.0), via Wikimedia Commons",
@@ -133,8 +183,22 @@ nonisolated enum AudioSeedQuestions {
             "keyboard-typing": "\"Typing - Model M13 1999.ogg\" by Raymangold22 (CC0), via Wikimedia Commons",
             "police-siren": "\"WWS Policecarsiren.ogg\" by Work With Sounds / Konrad Gutkowski (CC BY 4.0), via Wikimedia Commons",
             "train-whistle": "\"WWS SteamWhistle.ogg\" by Work With Sounds / Konrad Gutkowski (CC BY 4.0), via Wikimedia Commons",
+            "doorbell": "\"Sound Effect - Door Bell.ogg\" by Amada44 (CC0), via Wikimedia Commons",
+            "telephone-ring": "\"Model 500 Telephone British ring.ogg\" by CianMcCann (CC BY-SA 3.0), via Wikimedia Commons",
+            "ocean-waves": "\"Oceanwavescrushing.ogg\" by Luftrum (CC BY 3.0), via Wikimedia Commons",
+            "rain": "\"Rain (1).ogg\" by ezwa (Public domain), via Wikimedia Commons",
+            "bicycle-bell": "\"Bicycle-bell.wav\" by Xampi8 (CC BY 3.0), via Wikimedia Commons",
+            "vacuum-cleaner": "\"Het aanstaan van een stofzuiger - SoundCloud - Beeld en Geluid.ogg\" by Beeld en Geluid (CC BY-SA 3.0), via Wikimedia Commons",
+            "cash-register": "\"Cash register.ogg\" by Me (Public domain), via Wikimedia Commons",
+            "drum-roll": "\"Drum Roll Intro.ogg\" by Iwan Sounds and DIY (CC0), via Wikimedia Commons",
+            "referee-whistle": "\"218318 splicesound referee-whistle-blow-gymnasium.wav\" by SpliceSound (CC0), via Wikimedia Commons",
+            "typewriter": "\"WWS Typewriter.ogg\" by Work With Sounds / Konrad Gutkowski (CC BY 4.0), via Wikimedia Commons",
+            "scissors-snip": "\"WWS Paper-cuttingscissorsSloveniaPartisanPrintingShop.ogg\" by Work With Sounds / Technical Museum of Slovenia (CC BY 4.0), via Wikimedia Commons",
+            "page-turning": "\"Turning a page.ogg\" by planish (Public domain), via Wikimedia Commons",
+            "blender": "\"Het vermalen van fruit in een blender - SoundCloud - marloeskunst.ogg\" by marloeskunst (CC BY 3.0), via Wikimedia Commons",
         ]
-        let keys = ["alarm-clock", "applause", "camera-shutter", "car-engine", "church-bell", "door-knock", "geese-honking", "keyboard-typing", "police-siren", "train-whistle"]
+        let keys = ["alarm-clock", "applause", "camera-shutter", "car-engine", "church-bell", "door-knock", "geese-honking", "keyboard-typing", "police-siren", "train-whistle",
+                    "doorbell", "telephone-ring", "ocean-waves", "rain", "bicycle-bell", "vacuum-cleaner", "cash-register", "drum-roll", "referee-whistle", "typewriter", "scissors-snip", "page-turning", "blender"]
         return keys.enumerated().map { index, key in
             let correctText = names[key]!
             // Deterministic distractor pick: the next 5 clips in the pool
@@ -173,6 +237,20 @@ nonisolated enum AudioSeedQuestions {
             "toccata-fugue": "Toccata and Fugue in D Minor",
             "turkish-march": "Turkish March",
             "william-tell-overture": "William Tell Overture",
+            "ode-to-joy": "Ode to Joy",
+            "eine-kleine-nachtmusik": "Eine kleine Nachtmusik",
+            "canon-in-d": "Canon in D",
+            "habanera": "Habanera",
+            "1812-overture": "1812 Overture",
+            "sugar-plum-fairy": "Dance of the Sugar Plum Fairy",
+            "waltz-of-the-flowers": "Waltz of the Flowers",
+            "radetzky-march": "Radetzky March",
+            "can-can": "Can-Can (Galop Infernal)",
+            "gymnopedie": "Gymnopédie No. 1",
+            "clair-de-lune": "Clair de Lune",
+            "jupiter": "Jupiter (The Planets)",
+            "minuet-in-g": "Minuet in G Major",
+            "la-donna-e-mobile": "La Donna è Mobile",
         ]
         let attributions: [String: String] = [
             "air-on-g-string": "\"Air (Bach).ogg\" by Unknown (Public domain), via Wikimedia Commons",
@@ -188,8 +266,23 @@ nonisolated enum AudioSeedQuestions {
             "toccata-fugue": "\"BachToccataAndFugueInDMinorOpeningPianoHiFi.ogg\" by Opus33 at English Wikipedia (Public domain), via Wikimedia Commons",
             "turkish-march": "\"Rondo Alla Turka.ogg\" by Wolfgang Amadeus Mozart (Public domain), via Wikimedia Commons",
             "william-tell-overture": "\"William Tell Overture - Edison.ogg\" by Edison National Historic Site (Public domain), via Wikimedia Commons",
+            "ode-to-joy": "\"Ode to Joy.ogg\" by Ludwig van Beethoven (Public domain), via Wikimedia Commons",
+            "eine-kleine-nachtmusik": "\"Mozart K525 Serenade in G Major 1 - Allegro.ogg\" by Wolfgang Amadeus Mozart (Public domain), via Wikimedia Commons",
+            "canon-in-d": "\"Kevin MacLeod - Canon in D Major.ogg\" by Kevin MacLeod; original composition by Johann Pachelbel (CC BY 3.0), via Wikimedia Commons",
+            "habanera": "\"Habanera.ogg\" by Pracchia-78 (Public domain), via Wikimedia Commons",
+            "1812-overture": "\"1812.ogg\" by FortunateTheognis (Public domain), via Wikimedia Commons",
+            "sugar-plum-fairy": "\"Tchaikovsky - Dance of the Sugar Plum Fairy - The Nutcracker.ogg\" by Pyotr Ilyich Tchaikovsky (CC BY 3.0), via Wikimedia Commons",
+            "waltz-of-the-flowers": "\"P.I. Tchaikovsky's Waltz of the Flowers Performed by The U.S. Army Band, c. 2019.mp3\" performed by the U.S. Army Band (Public domain), via Wikimedia Commons",
+            "radetzky-march": "\"Radetzky March.ogg\" performed by the United States Marine Band, composed by Johann Strauss I (Public domain), via Wikimedia Commons",
+            "can-can": "\"Jacques Offenbach - Galop Infernal from Orpheus in the Underworld (Can Can) (1858).ogg\" by Gnissah (Public domain), via Wikimedia Commons",
+            "gymnopedie": "\"Gymnopedie No. 1..ogg\" by Teknopazzo (CC0), via Wikimedia Commons",
+            "clair-de-lune": "\"Clair de lune (Claude Debussy) Suite bergamasque.ogg\" by Claude Debussy (CC BY 3.0), via Wikimedia Commons",
+            "jupiter": "\"Holst The Planets Jupiter.ogg\" performed by the United States Air Force Band, composed by Gustav Holst (Public domain), via Wikimedia Commons",
+            "minuet-in-g": "\"Minuet in G major, BWV Anh. 114 (played by PLATO GSW).flac\" by Morn (CC0), via Wikimedia Commons",
+            "la-donna-e-mobile": "\"La Donna E Mobile Rigoletto.ogg\" by Giuseppe Verdi & Francesco Maria Piave (Public domain), via Wikimedia Commons",
         ]
-        let keys = ["air-on-g-string", "blue-danube", "flight-of-the-bumblebee", "four-seasons-spring", "fur-elise", "hall-of-the-mountain-king", "moonlight-sonata", "pomp-and-circumstance", "ride-of-the-valkyries", "swan-lake", "toccata-fugue", "turkish-march", "william-tell-overture"]
+        let keys = ["air-on-g-string", "blue-danube", "flight-of-the-bumblebee", "four-seasons-spring", "fur-elise", "hall-of-the-mountain-king", "moonlight-sonata", "pomp-and-circumstance", "ride-of-the-valkyries", "swan-lake", "toccata-fugue", "turkish-march", "william-tell-overture",
+                    "ode-to-joy", "eine-kleine-nachtmusik", "canon-in-d", "habanera", "1812-overture", "sugar-plum-fairy", "waltz-of-the-flowers", "radetzky-march", "can-can", "gymnopedie", "clair-de-lune", "jupiter", "minuet-in-g", "la-donna-e-mobile"]
         return keys.enumerated().map { index, key in
             let correctText = names[key]!
             // Deterministic distractor pick: the next 5 clips in the pool
