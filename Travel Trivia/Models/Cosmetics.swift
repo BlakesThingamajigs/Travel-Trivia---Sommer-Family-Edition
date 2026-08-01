@@ -2,11 +2,10 @@
 //  Cosmetics.swift
 //  Travel Trivia
 //
-//  DRAFT starter cosmetic catalog for My Garage — proposed by this session,
-//  not previously itemized in the design vault (see the session report).
-//  Kept small on purpose per the build prompt ("don't over-build the
-//  catalog this session"): 3 avatar categories, 3 car categories, a
-//  fast-early-win free item in each plus a few coin-priced ones.
+//  Confirmed starter cosmetic catalog for My Garage. Kept small on purpose
+//  per the build prompt ("don't over-build the catalog this session"): 3
+//  avatar categories, 3 car categories, a fast-early-win free item in each
+//  plus a few coin-priced ones.
 //
 //  Coin shop: badges stay pure achievements (BadgeCatalog/EarnedBadge,
 //  untouched) — cosmetics unlock by spending coins instead of earning a

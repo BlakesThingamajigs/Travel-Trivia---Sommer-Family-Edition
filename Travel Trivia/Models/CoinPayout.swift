@@ -3,9 +3,7 @@
 //  Travel Trivia
 //
 //  Coin payout math for winning a round, kept in this one spot so the
-//  scheme can be tuned without hunting through GameEngine. PROPOSED by this
-//  session (not specified by Blake) — flagged for review in the session
-//  report.
+//  scheme can be tuned without hunting through GameEngine. Confirmed final.
 //
 
 import Foundation

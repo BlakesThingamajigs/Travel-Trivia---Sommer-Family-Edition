@@ -27,3 +27,6 @@ DerivedData/
 .env
 .env.local
 *.xcconfig.local
+
+# Supabase CLI local state (project link cache, pooler URL, etc.)
+supabase/.temp/
