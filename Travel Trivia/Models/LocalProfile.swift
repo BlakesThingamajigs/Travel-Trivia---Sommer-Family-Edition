@@ -34,6 +34,20 @@ final class LocalProfile {
         didSet { defaults.set(audioOutput.rawValue, forKey: Keys.audioOutput) }
     }
 
+    /// Question narration read aloud via the bundled on-device voice.
+    /// Off by default — narration only speaks once a player explicitly
+    /// opts in (see AudioDirector.speak()).
+    var narratorEnabled: Bool {
+        didSet { defaults.set(narratorEnabled, forKey: Keys.narratorEnabled) }
+    }
+
+    /// Host's last-used round length — one global value (not per-genre),
+    /// offered as the default the next time the question-count control
+    /// appears in Create Game / Play Another Round.
+    var lastQuestionCount: Int {
+        didSet { defaults.set(lastQuestionCount, forKey: Keys.lastQuestionCount) }
+    }
+
     enum AudioOutput: String, CaseIterable, Identifiable {
         case bluetooth, phoneSpeaker
 
@@ -70,6 +84,9 @@ final class LocalProfile {
         audioOutput = defaults.string(forKey: Keys.audioOutput)
             .flatMap(AudioOutput.init(rawValue:)) ?? .bluetooth
         hasSeenWelcomeSignInPrompt = defaults.bool(forKey: Keys.hasSeenWelcomeSignInPrompt)
+        narratorEnabled = defaults.bool(forKey: Keys.narratorEnabled)
+        let storedCount = defaults.integer(forKey: Keys.lastQuestionCount)
+        lastQuestionCount = storedCount == 0 ? PartyConfig.defaultQuestionCount : storedCount
     }
 
     private enum Keys {
@@ -78,5 +95,7 @@ final class LocalProfile {
         static let shuffleGenres = "tt.settings.shuffleGenres"
         static let audioOutput = "tt.settings.audioOutput"
         static let hasSeenWelcomeSignInPrompt = "tt.local.hasSeenWelcomeSignInPrompt"
+        static let narratorEnabled = "tt.settings.narratorEnabled"
+        static let lastQuestionCount = "tt.settings.lastQuestionCount"
     }
 }

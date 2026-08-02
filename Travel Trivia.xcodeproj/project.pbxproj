@@ -7,7 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4D525CBEB5F1890F6D90CCC7 /* en_US-amy-medium in Resources */ = {isa = PBXBuildFile; fileRef = 59777616FAA8F48071D6EA06 /* en_US-amy-medium */; };
 		7ABA5E0000000000000000B1 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 7ABA5E0000000000000000B2 /* Supabase */; };
+		ACADCC968136DBF0446E3EE0 /* sherpa-onnx-combined.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7B1DF6A6C9A44DA078F4A80C /* sherpa-onnx-combined.xcframework */; };
+		F5D706EDA7550E08BB171543 /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = 891D48183B0772BFBE6C62C0 /* SherpaOnnx.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -31,6 +34,11 @@
 		2AD51EC83016A1AD00AEDBE1 /* Travel Trivia.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Travel Trivia.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AD51ED73016A1AF00AEDBE1 /* Travel TriviaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Travel TriviaTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AD51EE13016A1AF00AEDBE1 /* Travel TriviaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Travel TriviaUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		59777616FAA8F48071D6EA06 /* en_US-amy-medium */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; name = "en_US-amy-medium"; path = "Travel Trivia/Resources/NarratorVoice/en_US-amy-medium"; sourceTree = SOURCE_ROOT; };
+		7B1DF6A6C9A44DA078F4A80C /* sherpa-onnx-combined.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = "sherpa-onnx-combined.xcframework"; path = "Travel Trivia/Vendor/sherpa-onnx-combined.xcframework"; sourceTree = SOURCE_ROOT; };
+		891D48183B0772BFBE6C62C0 /* SherpaOnnx.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SherpaOnnx.swift; path = "Travel Trivia/Vendor/SherpaOnnx.swift"; sourceTree = SOURCE_ROOT; };
+		BCEAF7FB98D112082C67BD42 /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
+		FB8D597B218CA7A5F5E44520 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -38,6 +46,8 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				"Vendor/sherpa-onnx-combined.xcframework",
+				Vendor/SherpaOnnx.swift,
 			);
 			target = 2AD51EC73016A1AD00AEDBE1 /* Travel Trivia */;
 		};
@@ -70,6 +80,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7ABA5E0000000000000000B1 /* Supabase in Frameworks */,
+				ACADCC968136DBF0446E3EE0 /* sherpa-onnx-combined.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,6 +101,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		27F8992C1471F46242273271 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				BCEAF7FB98D112082C67BD42 /* CoreML.framework */,
+				FB8D597B218CA7A5F5E44520 /* Accelerate.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		2AD51EBF3016A1AD00AEDBE1 = {
 			isa = PBXGroup;
 			children = (
@@ -97,6 +117,8 @@
 				2AD51EDA3016A1AF00AEDBE1 /* Travel TriviaTests */,
 				2AD51EE43016A1AF00AEDBE1 /* Travel TriviaUITests */,
 				2AD51EC93016A1AD00AEDBE1 /* Products */,
+				5283DB81EEF143084B3861F9 /* NarratorTTSAssets */,
+				27F8992C1471F46242273271 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -108,6 +130,16 @@
 				2AD51EE13016A1AF00AEDBE1 /* Travel TriviaUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		5283DB81EEF143084B3861F9 /* NarratorTTSAssets */ = {
+			isa = PBXGroup;
+			children = (
+				59777616FAA8F48071D6EA06 /* en_US-amy-medium */,
+				891D48183B0772BFBE6C62C0 /* SherpaOnnx.swift */,
+				7B1DF6A6C9A44DA078F4A80C /* sherpa-onnx-combined.xcframework */,
+			);
+			name = NarratorTTSAssets;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -153,8 +185,6 @@
 				2AD51EDA3016A1AF00AEDBE1 /* Travel TriviaTests */,
 			);
 			name = "Travel TriviaTests";
-			packageProductDependencies = (
-			);
 			productName = "Travel TriviaTests";
 			productReference = 2AD51ED73016A1AF00AEDBE1 /* Travel TriviaTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -176,8 +206,6 @@
 				2AD51EE43016A1AF00AEDBE1 /* Travel TriviaUITests */,
 			);
 			name = "Travel TriviaUITests";
-			packageProductDependencies = (
-			);
 			productName = "Travel TriviaUITests";
 			productReference = 2AD51EE13016A1AF00AEDBE1 /* Travel TriviaUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -234,6 +262,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4D525CBEB5F1890F6D90CCC7 /* en_US-amy-medium in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,6 +287,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F5D706EDA7550E08BB171543 /* SherpaOnnx.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -421,6 +451,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = "Travel Trivia/Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.family-games";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -438,6 +469,10 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.blakesthingamajigs.Travel-Trivia";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = "com.blakesthingamajigs.Travel-Trivia";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -446,8 +481,8 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Travel Trivia/Vendor/SherpaOnnx-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -469,6 +504,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(inherited)";
 				INFOPLIST_FILE = "Travel Trivia/Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.family-games";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -486,6 +522,10 @@
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.blakesthingamajigs.Travel-Trivia";
 				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = "com.blakesthingamajigs.Travel-Trivia";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -494,8 +534,8 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Travel Trivia/Vendor/SherpaOnnx-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;

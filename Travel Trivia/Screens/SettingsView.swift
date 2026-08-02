@@ -10,7 +10,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
@@ -46,7 +45,11 @@ struct SettingsView: View {
                         caption("Question narration and sound-genre clips route through this pick live.")
                     }
 
-                    narratorVoiceSection
+                    VStack(alignment: .leading, spacing: 8) {
+                        StickerToggle(label: "Narrator", isOn: $profile.narratorEnabled)
+                            .accessibilityIdentifier("settings-narrator-toggle")
+                        caption("Reads question prompts aloud in a bundled offline voice. Off by default.")
+                    }
 
                     accountSection
                 }
@@ -64,82 +67,6 @@ struct SettingsView: View {
             .font(TT.font(12, .bold))
             .foregroundStyle(.white.opacity(0.92))
             .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var narratorVoiceSection: some View {
-        let resolved = NarratorVoiceCatalog.resolve()
-        return VStack(alignment: .leading, spacing: 8) {
-            StickerChip(text: "NARRATOR VOICE", fill: TT.sunshine, textSize: 11)
-            VStack(spacing: 10) {
-                ForEach(NarratorPersona.allCases) { persona in
-                    narratorPersonaRow(persona, availability: NarratorVoiceCatalog.availability(for: persona, resolved: resolved))
-                }
-            }
-            caption("Question narration reads in this voice. Personas need an Enhanced or Premium voice downloaded on this phone — see Settings → Accessibility → Spoken Content → Voices.")
-        }
-    }
-
-    /// A plain (non-Button) row container — the "select this persona" tap
-    /// target and the "open Settings to download a voice" tap target are
-    /// siblings inside it, never nested, since SwiftUI doesn't reliably
-    /// route taps to a Button embedded inside another Button's label.
-    private func narratorPersonaRow(_ persona: NarratorPersona, availability: NarratorVoiceCatalog.Availability) -> some View {
-        let selected = app.progress.narratorVoicePreference.persona == persona
-        let available = { if case .available = availability { true } else { false } }()
-
-        return HStack(spacing: 12) {
-            Button {
-                app.progress.setNarratorPersona(selected ? nil : persona)
-            } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(persona.displayName)
-                        .font(TT.font(15, .heavy))
-                        .foregroundStyle(available ? TT.ink : TT.ink.opacity(0.4))
-                    Text(persona.tagline)
-                        .font(TT.font(11, .bold))
-                        .foregroundStyle(available ? TT.ink.opacity(0.65) : TT.ink.opacity(0.35))
-                    switch availability {
-                    case .available(let name):
-                        Text(name.uppercased())
-                            .font(TT.font(10, .black))
-                            .foregroundStyle(TT.grape)
-                    case .needsDownload:
-                        Text("NEEDS DOWNLOADING")
-                            .font(TT.font(10, .black))
-                            .foregroundStyle(TT.cherry)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!available)
-            .accessibilityIdentifier("settings-narrator-\(persona.rawValue)")
-
-            if !available {
-                Button {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
-                } label: {
-                    Text("SETTINGS")
-                        .font(TT.font(11, .black))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .sticker(RoundedRectangle(cornerRadius: 10), fill: TT.grape)
-                }
-                .buttonStyle(.bubble)
-                .accessibilityIdentifier("settings-narrator-\(persona.rawValue)-open-settings")
-            } else if selected {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 22, weight: .black))
-                    .foregroundStyle(TT.signGreen)
-            }
-        }
-        .padding(14)
-        .sticker(RoundedRectangle(cornerRadius: 16),
-                 fill: selected ? TT.signGreen.opacity(0.15) : TT.paper)
     }
 
     private func audioOption(_ output: LocalProfile.AudioOutput,

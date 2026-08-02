@@ -68,6 +68,7 @@ struct StickerToggle: View {
             .sticker(RoundedRectangle(cornerRadius: 16), fill: TT.paper)
         }
         .buttonStyle(.bubble)
+        .accessibilityValue(isOn ? "on" : "off")
     }
 }
 
