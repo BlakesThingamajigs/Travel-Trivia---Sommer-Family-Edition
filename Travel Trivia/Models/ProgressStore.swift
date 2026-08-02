@@ -23,7 +23,6 @@ final class ProgressStore {
     private(set) var earnedBadgeIDs: Set<String> = []
     private(set) var avatarLoadout: AvatarLoadout
     private(set) var carLoadout: CarLoadout
-    private(set) var narratorVoicePreference: NarratorVoicePreference
     private(set) var coinWallet: CoinWallet
     private(set) var purchasedItemIDs: Set<String> = []
     var coinBalance: Int { coinWallet.balance }
@@ -64,16 +63,6 @@ final class ProgressStore {
             let fresh = CarLoadout(playerID: playerID)
             context.insert(fresh)
             carLoadout = fresh
-        }
-
-        let narratorFetch = FetchDescriptor<NarratorVoicePreference>(
-            predicate: #Predicate { $0.playerID == playerID })
-        if let existing = (try? context.fetch(narratorFetch))?.first {
-            narratorVoicePreference = existing
-        } else {
-            let fresh = NarratorVoicePreference(playerID: playerID)
-            context.insert(fresh)
-            narratorVoicePreference = fresh
         }
 
         let walletFetch = FetchDescriptor<CoinWallet>(
@@ -177,12 +166,6 @@ final class ProgressStore {
         save()
     }
 
-    /// Nil clears back to the system default voice.
-    func setNarratorPersona(_ persona: NarratorPersona?) {
-        narratorVoicePreference.persona = persona
-        save()
-    }
-
     // MARK: - Badges
 
     /// Awards a badge if it hasn't been earned yet. Idempotent — safe to
@@ -230,7 +213,6 @@ final class ProgressStore {
         carLoadout.colorID = "car-cherry"
         carLoadout.decalID = "decal-none"
         carLoadout.accessoryID = "cartop-none"
-        narratorVoicePreference.persona = nil
         celebrationQueue = []
 
         for itemID in purchasedItemIDs {

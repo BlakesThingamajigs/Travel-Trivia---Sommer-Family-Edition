@@ -1206,7 +1206,7 @@ struct ProgressStoreTests {
         let configuration = ModelConfiguration(url: storeURL)
         let playerID = UUID()
 
-        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         let progress1 = ProgressStore(context: container1.mainContext, playerID: playerID)
         #expect(progress1.earnedBadgeIDs.isEmpty)
@@ -1214,7 +1214,7 @@ struct ProgressStoreTests {
         // Idempotent: earning the same badge again shouldn't re-fire or duplicate.
         #expect(progress1.award(BadgeCatalog.perfectRoundID) == false)
 
-        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
         #expect(progress2.earnedBadgeIDs.contains(BadgeCatalog.perfectRoundID))
@@ -1232,14 +1232,14 @@ struct ProgressStoreTests {
 
         // Simulate a pre-migration save: earn the badge directly, as if it
         // happened back when Herd Reveal still existed in the catalog.
-        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         container1.mainContext.insert(EarnedBadge(playerID: playerID, badgeID: BadgeCatalog.modeMasteryID("herd-reveal")))
         try container1.mainContext.save()
 
         // A fresh launch (today's catalog, which no longer has Herd Reveal)
         // must load this save cleanly.
-        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
         #expect(progress2.earnedBadgeIDs.contains(BadgeCatalog.modeMasteryID("herd-reveal")))
@@ -1268,7 +1268,7 @@ struct ProgressStoreTests {
         let configuration = ModelConfiguration(url: storeURL)
         let playerID = UUID()
 
-        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         let progress1 = ProgressStore(context: container1.mainContext, playerID: playerID)
         #expect(progress1.avatarLoadout.headShapeID == "shape-round", "new fields should default sensibly on a fresh row")
@@ -1282,7 +1282,7 @@ struct ProgressStoreTests {
         #expect(progress1.purchase(CosmeticCatalog.item("face-mustache", in: CosmeticCatalog.faceMarks)) == true)
         progress1.equipFaceMark("face-mustache")
 
-        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
         #expect(progress2.avatarLoadout.hairID == "hair-mohawk")
@@ -1291,34 +1291,11 @@ struct ProgressStoreTests {
         #expect(progress2.isUnlocked(CosmeticCatalog.item("shape-square", in: CosmeticCatalog.headShapes)))
     }
 
-    /// Narrator persona pick is local-only (not party-wide, per-player like
-    /// avatar cosmetics) and must survive a relaunch the same way.
-    @Test func narratorPersonaPersistsAcrossANewContainer() throws {
-        let storeURL = FileManager.default.temporaryDirectory
-            .appending(path: "progress-narrator-test-\(UUID().uuidString).store")
-        let configuration = ModelConfiguration(url: storeURL)
-        let playerID = UUID()
-
-        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
-                                            configurations: configuration)
-        let progress1 = ProgressStore(context: container1.mainContext, playerID: playerID)
-        #expect(progress1.narratorVoicePreference.persona == nil, "fresh row defaults to system voice")
-        progress1.setNarratorPersona(.hypeMan)
-
-        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
-                                            configurations: configuration)
-        let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
-        #expect(progress2.narratorVoicePreference.persona == .hypeMan)
-
-        progress2.setNarratorPersona(nil)
-        #expect(progress2.narratorVoicePreference.persona == nil, "clears back to system default")
-    }
-
     @Test func finishingARoundAwardsGenreCompletionAndPerfectRound() async throws {
         let engineHarness = try EngineHarness()
         let engine = engineHarness.engine
         let progressConfig = ModelConfiguration(isStoredInMemoryOnly: true)
-        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                                    configurations: progressConfig)
         let progress = ProgressStore(context: progressContainer.mainContext, playerID: UUID())
         engine.progress = progress
@@ -1352,7 +1329,7 @@ struct ProgressStoreTests {
         let engineHarness = try EngineHarness()
         let engine = engineHarness.engine
         let progressConfig = ModelConfiguration(isStoredInMemoryOnly: true)
-        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                                    configurations: progressConfig)
         let progress = ProgressStore(context: progressContainer.mainContext, playerID: UUID())
         engine.progress = progress
@@ -1395,14 +1372,14 @@ struct ProgressStoreTests {
         let configuration = ModelConfiguration(url: storeURL)
         let playerID = UUID()
 
-        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let container1 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         let progress1 = ProgressStore(context: container1.mainContext, playerID: playerID)
         progress1.awardCoins(100)
         let bowtie = CosmeticCatalog.item("acc-bowtie", in: CosmeticCatalog.accessories)
         #expect(progress1.purchase(bowtie) == true)
 
-        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        let container2 = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                             configurations: configuration)
         let progress2 = ProgressStore(context: container2.mainContext, playerID: playerID)
         #expect(progress2.coinBalance == 100 - bowtie.price)
@@ -1448,7 +1425,7 @@ struct GenreRoutingTests {
             let engine = GameEngine(context: container.mainContext)
             let profile = LocalProfile(defaults: UserDefaults(suiteName: "genre-routing-test-\(UUID())")!)
             let progressContainer = try ModelContainer(
-                for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+                for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                 configurations: ModelConfiguration(isStoredInMemoryOnly: true))
             let progress = ProgressStore(context: progressContainer.mainContext, playerID: profile.playerID)
             let party = PartySession()
@@ -1495,7 +1472,8 @@ struct GenreRoutingTests {
 struct AudioDirectorInterruptionTests {
     @Test func realOSInterruptionNotificationPausesAndResumesNarration() async throws {
         let profile = LocalProfile(defaults: UserDefaults(suiteName: "audio-director-test-\(UUID())")!)
-        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self, NarratorVoicePreference.self,
+        profile.narratorEnabled = true
+        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
                                                    configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let progress = ProgressStore(context: progressContainer.mainContext, playerID: profile.playerID)
         let director = AudioDirector(profile: profile, progress: progress)
@@ -1520,76 +1498,34 @@ struct AudioDirectorInterruptionTests {
     }
 }
 
-/// A synthetic stand-in for `AVSpeechSynthesisVoice` — real Enhanced/
-/// Premium voices are an optional on-device download (see NarratorVoice.swift),
-/// not guaranteed present on the machine running these tests, so the
-/// persona-matching logic is exercised against hand-built voice traits
-/// instead of whatever happens to be installed here.
-private struct FakeSpeechVoice: SpeechVoiceDescribing {
-    var identifier: String
-    var name: String
-    var language: String
-    var gender: AVSpeechSynthesisVoiceGender
-    var quality: AVSpeechSynthesisVoiceQuality
-}
-
-/// The 4-persona narrator voice matching logic (NarratorVoiceCatalog): each
-/// persona resolves to a distinct on-device Enhanced/Premium voice scored
-/// by language/gender fit, and a persona with no eligible voice left is
-/// reported as needing a download rather than silently falling back.
+/// The narrator on/off toggle (replaces the earlier 4-persona system — see
+/// 2026-08-01_narrator-voice-simplified_decisions.md): local per-device
+/// UserDefaults, defaults off, and `AudioDirector.speak()` must skip
+/// synthesis entirely while it's off rather than synthesizing and
+/// discarding the result.
 @MainActor
-struct NarratorVoiceTests {
-    @Test func fourPersonasResolveToFourDistinctVoicesFromARichPool() {
-        let pool: [FakeSpeechVoice] = [
-            .init(identifier: "gb-premium-male", name: "Arthur", language: "en-GB", gender: .male, quality: .premium),
-            .init(identifier: "us-enhanced-female", name: "Nora", language: "en-US", gender: .female, quality: .enhanced),
-            .init(identifier: "us-premium-male-1", name: "Tom", language: "en-US", gender: .male, quality: .premium),
-            .init(identifier: "us-enhanced-male-2", name: "Evan", language: "en-US", gender: .male, quality: .enhanced),
-        ]
-        let resolved = NarratorVoiceCatalog.resolve(from: pool)
-        #expect(resolved.count == 4)
-        // Every persona lands on a different identifier — nobody doubles up.
-        #expect(Set(resolved.values.map(\.identifier)).count == 4)
-        // Tour Guide is language-locked to British English.
-        #expect(resolved[.tourGuide]?.identifier == "gb-premium-male")
-        #expect(resolved[.coPilot]?.identifier == "us-enhanced-female")
+struct NarratorToggleTests {
+    @Test func freshPlayerDefaultsToNarratorOff() {
+        let profile = LocalProfile(defaults: UserDefaults(suiteName: "narrator-default-test-\(UUID())")!)
+        #expect(profile.narratorEnabled == false)
     }
 
-    @Test func personaWithNoEligibleVoiceReportsNeedsDownload() {
-        // No en-GB voice anywhere in the pool — Tour Guide has nothing to
-        // claim, language-locked as it is, even though English voices exist.
-        let pool: [FakeSpeechVoice] = [
-            .init(identifier: "us-premium-male", name: "Tom", language: "en-US", gender: .male, quality: .premium),
-        ]
-        let resolved = NarratorVoiceCatalog.resolve(from: pool)
-        #expect(resolved[.tourGuide] == nil)
-        if case .needsDownload = NarratorVoiceCatalog.availability(for: .tourGuide, resolved: resolved) {
-            // expected
-        } else {
-            Issue.record("Tour Guide should need downloading with no en-GB voice available")
-        }
-        if case .available = NarratorVoiceCatalog.availability(for: .coPilot, resolved: resolved) {
-            // expected — falls back to the one en-US voice present
-        } else {
-            Issue.record("Co-Pilot should resolve to the available en-US voice")
-        }
-    }
+    @Test func speakDoesNoSynthesisWorkWhenNarratorIsOff() async throws {
+        let profile = LocalProfile(defaults: UserDefaults(suiteName: "narrator-off-test-\(UUID())")!)
+        #expect(profile.narratorEnabled == false)
+        let progressContainer = try ModelContainer(for: AvatarLoadout.self, CarLoadout.self, EarnedBadge.self, CoinWallet.self, PurchasedCosmetic.self,
+                                                   configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let progress = ProgressStore(context: progressContainer.mainContext, playerID: profile.playerID)
+        let director = AudioDirector(profile: profile, progress: progress)
 
-    @Test func defaultQualityVoicesAreNeverEligible() {
-        // Only a Compact/default-quality voice available — every persona
-        // should report needs-download rather than silently using it.
-        let pool: [FakeSpeechVoice] = [
-            .init(identifier: "us-default", name: "Samantha", language: "en-US", gender: .female, quality: .default),
-        ]
-        let resolved = NarratorVoiceCatalog.resolve(from: pool)
-        #expect(resolved.isEmpty)
-    }
+        var completionFired = false
+        director.speak("This should never be synthesized") { completionFired = true }
 
-    @Test func emptyPoolLeavesEveryPersonaNeedingDownload() {
-        let resolved = NarratorVoiceCatalog.resolve(from: [FakeSpeechVoice]())
-        for persona in NarratorPersona.allCases {
-            #expect(resolved[persona] == nil)
-        }
+        // No async synthesis was kicked off, so isSpeaking never flips true
+        // and the completion — chained work like presentQuestion's clip
+        // playback — still runs immediately.
+        #expect(director.isSpeaking == false)
+        #expect(completionFired == true)
     }
 }
 

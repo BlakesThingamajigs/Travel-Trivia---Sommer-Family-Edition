@@ -216,32 +216,21 @@ final class Travel_TriviaUITests: XCTestCase {
                        "Equipped cosmetic should still be equipped after relaunch")
     }
 
-    /// Narrator voice persona picker: on a device/simulator with no
-    /// Enhanced/Premium voices downloaded (true of every fresh sim, and the
-    /// real "not guaranteed present" case the feature is built for), every
-    /// persona row must show the needs-download state and be unselectable,
-    /// and its "SETTINGS" button must actually background this app by
-    /// opening the system Settings app — not silently no-op.
+    /// Narrator on/off toggle: defaults off for a fresh player, and tapping
+    /// it flips the switch — replaces the earlier 4-persona picker (see
+    /// 2026-08-01_narrator-voice-simplified_decisions.md).
     @MainActor
-    func testNarratorVoiceNeedsDownloadStateAndSettingsDeepLink() throws {
+    func testNarratorToggleDefaultsOffAndCanBeEnabled() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-TTResetProgress", "-TTSkipWelcome", "-TTSettings"]
         app.launch()
 
-        for persona in ["coPilot", "tourGuide", "adventurer", "hypeMan"] {
-            let row = app.buttons["settings-narrator-\(persona)"]
-            XCTAssertTrue(row.waitForExistence(timeout: 5))
-            XCTAssertFalse(row.isEnabled, "\(persona) has no Enhanced/Premium voice on a fresh sim — its row must be unselectable")
-        }
+        let toggle = app.buttons["settings-narrator-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? String, "off", "narrator should default off for a fresh player")
 
-        let openSettings = app.buttons["settings-narrator-coPilot-open-settings"]
-        XCTAssertTrue(openSettings.exists)
-        openSettings.tap()
-
-        // A real navigation out to the system Settings app, not a no-op —
-        // this app must actually resign active.
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5),
-                       "tapping SETTINGS should open the system Settings app, backgrounding Travel Trivia")
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "on", "tapping the toggle should turn narration on")
     }
 
     /// 6-seat car: screenshots Our Ride's seat picker for a real hosted
