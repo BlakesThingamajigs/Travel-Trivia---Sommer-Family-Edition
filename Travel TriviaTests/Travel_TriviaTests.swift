@@ -232,16 +232,19 @@ struct SeedContentTests {
     }
 
     @Test func deckDealsRouteByGenreAndTier() {
-        // Round 3 (2026-08-01) grew both packs again; QuestionDeck.deal
-        // returns every tier-matching question (no fixed round length), so
-        // these counts track the packs' new easy/non-easy splits directly:
-        // would-you-rather is now 130 total (48 easy / 62 medium / 20 hard),
-        // movie-quote-mashup is now 100 total (36 easy / 41 medium / 23 hard).
-        let littleOnes = QuestionDeck.deal(genreSlug: "would-you-rather", tier: .littleOnes, seed: 3)
+        // Round 3 (2026-08-01) grew both packs again. QuestionDeck.deal now
+        // truncates to `count` (host-set question count — see
+        // truncatesToTheRequestedCount below); these calls pass a count far
+        // larger than any pack so they keep exercising genre/tier routing
+        // against the packs' full easy/non-easy splits, unaffected by
+        // truncation: would-you-rather is 130 total (48 easy / 62 medium /
+        // 20 hard), movie-quote-mashup is 100 total (36 easy / 41 medium /
+        // 23 hard).
+        let littleOnes = QuestionDeck.deal(genreSlug: "would-you-rather", tier: .littleOnes, seed: 3, count: 1000)
         #expect(littleOnes.count == 48)
         #expect(littleOnes.allSatisfy { $0.difficulty == .easy && $0.id.hasPrefix("wyr-") })
 
-        let grownUp = QuestionDeck.deal(genreSlug: "movie-quote-mashup", tier: .grownUp, seed: 3)
+        let grownUp = QuestionDeck.deal(genreSlug: "movie-quote-mashup", tier: .grownUp, seed: 3, count: 1000)
         #expect(grownUp.count == 64)
         #expect(grownUp.allSatisfy { $0.difficulty != .easy && $0.id.hasPrefix("mqm-") })
 
@@ -252,7 +255,7 @@ struct SeedContentTests {
         // tier gap for these 3 audio genres; each pack's easy/medium/hard
         // split covers all of familyMix, littleOnes, and grownUp with
         // something playable).
-        let soundFX = QuestionDeck.deal(genreSlug: "sound-fx-guess", tier: .familyMix, seed: 3)
+        let soundFX = QuestionDeck.deal(genreSlug: "sound-fx-guess", tier: .familyMix, seed: 3, count: 1000)
         #expect(soundFX.count == 23)
         #expect(soundFX.allSatisfy { $0.hasAudioClip })
 
@@ -261,8 +264,29 @@ struct SeedContentTests {
         // fallback path the old test used sound-fx-guess for. Round 2
         // (2026-07-27) grew Riddle Realm from 16 to 46 questions; round 3
         // (2026-08-01) grew it again to 76.
-        let fallback = QuestionDeck.deal(genreSlug: "not-a-real-genre", tier: .familyMix, seed: 3)
+        let fallback = QuestionDeck.deal(genreSlug: "not-a-real-genre", tier: .familyMix, seed: 3, count: 1000)
         #expect(fallback.count == 76)
+    }
+
+    /// Host-set question count (PartyConfig.questionCount): the dealt deck
+    /// truncates to exactly the requested count when the tier-filtered pack
+    /// has at least that many questions available.
+    @Test func dealTruncatesToTheRequestedCount() {
+        let deck = QuestionDeck.deal(genreSlug: "riddle-realm", tier: .familyMix, seed: 3, count: 10)
+        #expect(deck.count == 10)
+    }
+
+    /// Requesting more questions than the tier-filtered pack has left still
+    /// has to deal a playable game — same "empty tier pack" spirit as the
+    /// fallback case above, just for a shortfall instead of an empty pack.
+    @Test func dealPlaysTheFullAvailablePackWhenCountExceedsWhatsAvailable() {
+        // Little Ones (easy-only) on a small pack: fewer than 999 questions
+        // will ever be available, so this exercises the "play what you've
+        // got" floor without depending on an exact current pack size.
+        let deck = QuestionDeck.deal(genreSlug: "riddle-realm", tier: .littleOnes, seed: 3, count: 999)
+        #expect(!deck.isEmpty)
+        #expect(deck.count < 999)
+        #expect(deck.allSatisfy { $0.difficulty == .easy })
     }
 
     /// Genre Batch 2: six new fixed-answer packs (see SeedQuestions.swift).

@@ -104,7 +104,8 @@ final class AppModel {
                 genre = (config.genreSlug, config.genreName)
             }
             let deck = QuestionDeck.deal(genreSlug: genre.slug, tier: config.difficulty,
-                                         livePack: self?.catalog.questionPack(genreSlug: genre.slug))
+                                         livePack: self?.catalog.questionPack(genreSlug: genre.slug),
+                                         count: config.questionCount)
             return (deck, genre.slug, genre.name)
         }
     }
@@ -213,10 +214,12 @@ final class AppModel {
                 ?? ContentCatalog.bundledModes.last!
             let genre = catalog.genre(slug: value(after: "-TTGenre") ?? "riddle-realm")
                 ?? ContentCatalog.bundledGenres.first { $0.slug == "riddle-realm" }!
+            let questionCount = value(after: "-TTQuestionCount").flatMap(Int.init) ?? PartyConfig.defaultQuestionCount
             let config = PartyConfig(modeSlug: mode.slug, modeName: mode.displayName,
                                      genreSlug: genre.slug, genreName: genre.displayName,
                                      difficulty: .familyMix, minPlayers: 2,
-                                     requiresEvenPlayers: mode.requiresEvenPlayers)
+                                     requiresEvenPlayers: mode.requiresEvenPlayers,
+                                     questionCount: questionCount)
             hostParty(partyName: arguments[i + 1], code: arguments[i + 2], config: config)
         }
         if let i = arguments.firstIndex(of: "-TTJoinParty"), arguments.count > i + 2 {

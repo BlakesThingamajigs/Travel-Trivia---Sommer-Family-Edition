@@ -84,6 +84,15 @@ nonisolated struct PartyConfig: Codable, Equatable, Sendable {
     /// squads, so the Lobby gates a short/odd start the same way it gates
     /// an under-minimum start.
     var requiresEvenPlayers: Bool = false
+    /// Host-set round length — QuestionDeck.deal truncates the dealt deck
+    /// to this many questions (or fewer, if the tier-filtered pack doesn't
+    /// have this many available). Clamped to 5...50 by QuestionCountControl.
+    var questionCount: Int = PartyConfig.defaultQuestionCount
+
+    /// A quick round's worth of questions — long enough for a real game,
+    /// short enough not to commit a car full of people to a marathon by
+    /// default.
+    static let defaultQuestionCount = 15
 }
 
 nonisolated struct PartyPlayerState: Codable, Equatable, Identifiable, Sendable {

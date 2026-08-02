@@ -632,4 +632,84 @@ final class Travel_TriviaUITests: XCTestCase {
             add(afterAttachment)
         }
     }
+
+    /// Host-set question count acts as a ceiling on round length, driven
+    /// through the real -TTHostParty harness (PartyConfig -> QuestionDeck.
+    /// deal), not the -TTPractice single-device slice, since only the party
+    /// path carries `questionCount`. Asserts <=5 rather than ==5: this test
+    /// always taps "answer-0" regardless of which option the shuffle put
+    /// the correct answer in, so Three Strikes' real 3-strikes elimination
+    /// can legitimately end the round before all 5 are dealt — that's
+    /// correct GameEngine behavior, not a truncation bug (see the exact-5
+    /// Would You Rather variant below for a mode with no elimination risk,
+    /// where every dealt question really does get answered).
+    @MainActor
+    func testQuestionCountFiveEndsThreeStrikesRoundAfterFiveQuestions() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTHostParty", "Count Check", "4242", "Pilot",
+                                "-TTMode", "three-strikes", "-TTGenre", "riddle-realm",
+                                "-TTQuestionCount", "5"]
+        app.launch()
+
+        let startAnyway = app.alerts.buttons["Start Anyway"]
+        XCTAssertTrue(app.buttons["lobby-start"].waitForExistence(timeout: 8))
+        app.buttons["lobby-start"].tap()
+        if startAnyway.waitForExistence(timeout: 3) { startAnyway.tap() }
+
+        XCTAssertTrue(app.buttons["start-trip"].waitForExistence(timeout: 5))
+        app.buttons["start-trip"].tap()
+
+        let victoryTitle = app.staticTexts["victory-title"]
+        var answeredCount = 0
+        let deadline = Date().addingTimeInterval(60)
+        while !victoryTitle.exists, Date() < deadline {
+            let answer = app.buttons["answer-0"]
+            if answer.exists, answer.isEnabled, answer.isHittable {
+                answer.tap()
+                answeredCount += 1
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        }
+
+        XCTAssertTrue(victoryTitle.exists, "Round should end on the victory screen")
+        XCTAssertLessThanOrEqual(answeredCount, 5, "A round hosted with questionCount 5 should never run past 5 questions")
+    }
+
+    /// Same question-count enforcement, for Would You Rather — the mode
+    /// that skips genre selection entirely but must still respect the
+    /// host-set count.
+    @MainActor
+    func testQuestionCountFiveEndsWouldYouRatherRoundAfterFiveQuestions() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-TTHostParty", "Count Check WYR", "4243", "Pilot",
+                                "-TTMode", "would-you-rather", "-TTGenre", "would-you-rather",
+                                "-TTQuestionCount", "5"]
+        app.launch()
+
+        let startAnyway = app.alerts.buttons["Start Anyway"]
+        XCTAssertTrue(app.buttons["lobby-start"].waitForExistence(timeout: 8))
+        app.buttons["lobby-start"].tap()
+        if startAnyway.waitForExistence(timeout: 3) { startAnyway.tap() }
+
+        XCTAssertTrue(app.buttons["start-trip"].waitForExistence(timeout: 5))
+        app.buttons["start-trip"].tap()
+
+        // Would You Rather has no winner/scoring — it lands on
+        // WouldYouRatherRecap (wyr-recap-title), not VictoryView's
+        // "victory-title".
+        let recapTitle = app.staticTexts["wyr-recap-title"]
+        var answeredCount = 0
+        let deadline = Date().addingTimeInterval(60)
+        while !recapTitle.exists, Date() < deadline {
+            let answer = app.buttons["answer-0"]
+            if answer.exists, answer.isEnabled, answer.isHittable {
+                answer.tap()
+                answeredCount += 1
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        }
+
+        XCTAssertTrue(recapTitle.exists, "Round should end on the Would You Rather recap screen")
+        XCTAssertEqual(answeredCount, 5, "A 5-question round should take exactly 5 answers to reach the recap")
+    }
 }

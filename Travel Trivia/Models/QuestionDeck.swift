@@ -12,7 +12,8 @@ import Foundation
 enum QuestionDeck {
     static func deal(genreSlug: String, tier: DifficultyTier,
                      livePack: [TriviaQuestion]? = nil,
-                     seed: UInt64? = nil) -> [TriviaQuestion] {
+                     seed: UInt64? = nil,
+                     count: Int = PartyConfig.defaultQuestionCount) -> [TriviaQuestion] {
         var generator: any RandomNumberGenerator = seed.map { SeededGenerator(seed: $0) }
             ?? SystemRandomNumberGenerator()
         let pack = livePack ?? SeedQuestions.packs[genreSlug] ?? SeedQuestions.riddleRealm
@@ -20,7 +21,10 @@ enum QuestionDeck {
         let filtered = pack.filter { allowed.contains($0.difficulty) }
         // A pack with nothing in the tier still has to deal a playable game.
         let dealt = filtered.isEmpty ? pack : filtered
+        // Fewer questions available than requested still has to deal a
+        // playable game — play the whole (smaller) pack rather than error.
         return dealt.shuffled(using: &generator)
+            .prefix(min(count, dealt.count))
             .map { $0.shufflingOptions(using: &generator) }
     }
 }
