@@ -1522,6 +1522,25 @@ struct AudioDirectorInterruptionTests {
     }
 }
 
+/// QuestionCountControl's shared clamp — used by both the slider and the
+/// tap-to-edit text field so typed input can't escape 5...50.
+struct QuestionCountRangeTests {
+    @Test func clampRejectsBelowRange() {
+        #expect(QuestionCountRange.clamp(0) == 5)
+        #expect(QuestionCountRange.clamp(-12) == 5)
+    }
+
+    @Test func clampRejectsAboveRange() {
+        #expect(QuestionCountRange.clamp(999) == 50)
+    }
+
+    @Test func clampPassesThroughInRangeValues() {
+        #expect(QuestionCountRange.clamp(5) == 5)
+        #expect(QuestionCountRange.clamp(27) == 27)
+        #expect(QuestionCountRange.clamp(50) == 50)
+    }
+}
+
 /// The narrator on/off toggle (replaces the earlier 4-persona system — see
 /// 2026-08-01_narrator-voice-simplified_decisions.md): local per-device
 /// UserDefaults, defaults off, and `AudioDirector.speak()` must skip

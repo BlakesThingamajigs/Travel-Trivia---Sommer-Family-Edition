@@ -23,6 +23,7 @@ struct CreateGameFlow: View {
     @State private var selectedDifficulty: DifficultyTier?
     @State private var partyName = ""
     @State private var code = String(Int.random(in: 1000...9999))
+    @State private var questionCount = 0
 
     /// Would You Rather always plays its own genre — genre selection is
     /// skipped for this mode only (see CreateGameFlow's file header /
@@ -60,6 +61,9 @@ struct CreateGameFlow: View {
         }
         .padding(.vertical, 10)
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: step)
+        .onAppear {
+            if questionCount == 0 { questionCount = app.profile.lastQuestionCount }
+        }
     }
 
     private var headerTitle: String {
@@ -149,6 +153,8 @@ struct CreateGameFlow: View {
                              prompt: "Sommer Road Trip")
                 .accessibilityIdentifier("party-name-field")
 
+            QuestionCountControl(count: $questionCount)
+
             VStack(spacing: 8) {
                 StickerChip(text: "JOIN CODE", fill: TT.sunshine, textSize: 11)
                 HStack(spacing: 14) {
@@ -201,7 +207,9 @@ struct CreateGameFlow: View {
         let config = PartyConfig(modeSlug: mode.slug, modeName: mode.displayName,
                                  genreSlug: genre.slug, genreName: genre.displayName,
                                  difficulty: difficulty, minPlayers: mode.minPlayers,
-                                 requiresEvenPlayers: mode.requiresEvenPlayers)
+                                 requiresEvenPlayers: mode.requiresEvenPlayers,
+                                 questionCount: questionCount)
+        app.profile.lastQuestionCount = questionCount
         app.hostParty(partyName: trimmedName, code: code, config: config)
     }
 }

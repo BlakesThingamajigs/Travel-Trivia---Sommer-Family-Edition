@@ -17,12 +17,14 @@ struct PlayAnotherRoundPicker: View {
     var onCancel: () -> Void
 
     private enum Step: Int {
-        case mode, genre, difficulty
+        case mode, genre, difficulty, questionCount
     }
 
     @State private var step: Step = .mode
     @State private var selectedMode: GameMode?
     @State private var selectedGenre: TriviaGenre?
+    @State private var selectedDifficulty: DifficultyTier?
+    @State private var questionCount = 0
 
     /// Mirrors CreateGameFlow: Would You Rather always plays its own genre,
     /// so genre selection is skipped here too.
@@ -34,10 +36,11 @@ struct PlayAnotherRoundPicker: View {
         switch step {
         case .mode: return 0
         case .difficulty: return 1
+        case .questionCount: return 2
         case .genre: return step.rawValue
         }
     }
-    private var displayStepCount: Int { isWouldYouRatherFlow ? 2 : 3 }
+    private var displayStepCount: Int { isWouldYouRatherFlow ? 3 : 4 }
 
     var body: some View {
         VStack(spacing: 14) {
@@ -58,10 +61,14 @@ struct PlayAnotherRoundPicker: View {
             case .mode: modeStep
             case .genre: genreStep
             case .difficulty: difficultyStep
+            case .questionCount: questionCountStep
             }
         }
         .padding(.vertical, 10)
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: step)
+        .onAppear {
+            if questionCount == 0 { questionCount = app.profile.lastQuestionCount }
+        }
     }
 
     private var headerTitle: String {
@@ -69,6 +76,7 @@ struct PlayAnotherRoundPicker: View {
         case .mode: "NEXT ROUND: MODE"
         case .genre: "NEXT ROUND: GENRE"
         case .difficulty: "NEXT ROUND: DIFFICULTY"
+        case .questionCount: "NEXT ROUND: LENGTH"
         }
     }
 
@@ -77,6 +85,7 @@ struct PlayAnotherRoundPicker: View {
         case .mode: onCancel()
         case .genre: step = .mode
         case .difficulty: step = isWouldYouRatherFlow ? .mode : .genre
+        case .questionCount: step = .difficulty
         }
     }
 
@@ -123,9 +132,25 @@ struct PlayAnotherRoundPicker: View {
             Spacer(minLength: 0)
             ForEach(DifficultyTier.allCases) { tier in
                 DifficultyCard(tier: tier) {
-                    finish(difficulty: tier)
+                    selectedDifficulty = tier
+                    step = .questionCount
                 }
             }
+            Spacer(minLength: 0)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var questionCountStep: some View {
+        VStack(spacing: 20) {
+            Spacer(minLength: 0)
+            QuestionCountControl(count: $questionCount)
+            Button(action: finish) {
+                RoadSignLabel(title: "Start Round")
+            }
+            .buttonStyle(.bubble)
+            .accessibilityIdentifier("play-another-round-start")
             Spacer(minLength: 0)
             Spacer(minLength: 0)
         }
@@ -136,12 +161,14 @@ struct PlayAnotherRoundPicker: View {
         onStart(currentConfig)
     }
 
-    private func finish(difficulty: DifficultyTier) {
-        guard let mode = selectedMode, let genre = selectedGenre else { return }
+    private func finish() {
+        guard let mode = selectedMode, let genre = selectedGenre, let difficulty = selectedDifficulty else { return }
         let config = PartyConfig(modeSlug: mode.slug, modeName: mode.displayName,
                                  genreSlug: genre.slug, genreName: genre.displayName,
                                  difficulty: difficulty, minPlayers: mode.minPlayers,
-                                 requiresEvenPlayers: mode.requiresEvenPlayers)
+                                 requiresEvenPlayers: mode.requiresEvenPlayers,
+                                 questionCount: questionCount)
+        app.profile.lastQuestionCount = questionCount
         onStart(config)
     }
 }
