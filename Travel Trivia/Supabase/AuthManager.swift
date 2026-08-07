@@ -119,7 +119,24 @@ final class AuthManager: NSObject {
         } catch let error as ASAuthorizationError where error.code == .canceled {
             // Silent: the host backed out of the system sheet on purpose.
         } catch {
-            lastErrorMessage = error.localizedDescription
+            lastErrorMessage = Self.presentableAppleErrorMessage(for: error)
+        }
+    }
+
+    /// ASAuthorizationController reports most real failures as `.unknown`
+    /// (including "this device isn't signed in to an Apple Account in
+    /// Settings," the most common one hosts hit) — its raw
+    /// localizedDescription is a cryptic error-code string, not something
+    /// to show a host.
+    private static func presentableAppleErrorMessage(for error: Error) -> String {
+        guard let authError = error as? ASAuthorizationError else {
+            return "Sign in with Apple couldn't complete. Please try again."
+        }
+        switch authError.code {
+        case .unknown:
+            return "Sign in with Apple isn't available — make sure this device is signed in to an Apple Account in Settings, then try again."
+        default:
+            return "Sign in with Apple couldn't complete. Please try again."
         }
     }
 
@@ -155,7 +172,7 @@ final class AuthManager: NSObject {
         } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
             // Silent: the host dismissed the web sheet on purpose.
         } catch {
-            lastErrorMessage = error.localizedDescription
+            lastErrorMessage = "Sign in with Google couldn't complete. Please try again."
         }
     }
 
