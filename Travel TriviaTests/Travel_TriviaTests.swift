@@ -197,11 +197,13 @@ struct SeedContentTests {
         // Round 2 (2026-07-27) added 30 more (41-70) on top of the original
         // 40. Round 3 (2026-08-01) added 60 more (71-130): a "round 3" batch
         // of 30 that was drafted back on 2026-07-28 but never actually
-        // seeded until now, plus the separate "round 4" batch of 30.
-        #expect(questions.count == 130)
-        #expect(questions.filter { $0.difficulty == .easy }.count == 48)
-        #expect(questions.filter { $0.difficulty == .medium }.count == 62)
-        #expect(questions.filter { $0.difficulty == .hard }.count == 20)
+        // seeded until now, plus the separate "round 4" batch of 30. Round 5
+        // (2026-08-08) added 174 more (131-304) to scale WYR's pool for a
+        // genre with no fallback variety — every game is WYR or nothing.
+        #expect(questions.count == 304)
+        #expect(questions.filter { $0.difficulty == .easy }.count == 106)
+        #expect(questions.filter { $0.difficulty == .medium }.count == 153)
+        #expect(questions.filter { $0.difficulty == .hard }.count == 45)
 
         for question in questions {
             #expect(question.options.count == 6)
@@ -210,7 +212,7 @@ struct SeedContentTests {
             #expect(Set(question.options.map(\.id)).count == 6)
             #expect(!question.prompt.isEmpty)
         }
-        #expect(Set(questions.map(\.id)).count == 130)
+        #expect(Set(questions.map(\.id)).count == 304)
     }
 
     @Test func movieQuoteMashupPackHasFixedAnswers() {
@@ -237,11 +239,11 @@ struct SeedContentTests {
         // truncatesToTheRequestedCount below); these calls pass a count far
         // larger than any pack so they keep exercising genre/tier routing
         // against the packs' full easy/non-easy splits, unaffected by
-        // truncation: would-you-rather is 130 total (48 easy / 62 medium /
-        // 20 hard), movie-quote-mashup is 100 total (36 easy / 41 medium /
+        // truncation: would-you-rather is 304 total (106 easy / 153 medium /
+        // 45 hard), movie-quote-mashup is 100 total (36 easy / 41 medium /
         // 23 hard).
         let littleOnes = QuestionDeck.deal(genreSlug: "would-you-rather", tier: .littleOnes, seed: 3, count: 1000)
-        #expect(littleOnes.count == 48)
+        #expect(littleOnes.count == 106)
         #expect(littleOnes.allSatisfy { $0.difficulty == .easy && $0.id.hasPrefix("wyr-") })
 
         let grownUp = QuestionDeck.deal(genreSlug: "movie-quote-mashup", tier: .grownUp, seed: 3, count: 1000)
