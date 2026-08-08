@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		4D525CBEB5F1890F6D90CCC7 /* en_US-amy-medium in Resources */ = {isa = PBXBuildFile; fileRef = 59777616FAA8F48071D6EA06 /* en_US-amy-medium */; };
 		7ABA5E0000000000000000B1 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 7ABA5E0000000000000000B2 /* Supabase */; };
-		ACADCC968136DBF0446E3EE0 /* sherpa-onnx-combined.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7B1DF6A6C9A44DA078F4A80C /* sherpa-onnx-combined.xcframework */; };
+		7ABA5E0000000000000000C3 /* SherpaOnnxBinary in Frameworks */ = {isa = PBXBuildFile; productRef = 7ABA5E0000000000000000C2 /* SherpaOnnxBinary */; };
 		F5D706EDA7550E08BB171543 /* SherpaOnnx.swift in Sources */ = {isa = PBXBuildFile; fileRef = 891D48183B0772BFBE6C62C0 /* SherpaOnnx.swift */; };
 /* End PBXBuildFile section */
 
@@ -35,7 +35,6 @@
 		2AD51ED73016A1AF00AEDBE1 /* Travel TriviaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Travel TriviaTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AD51EE13016A1AF00AEDBE1 /* Travel TriviaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Travel TriviaUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		59777616FAA8F48071D6EA06 /* en_US-amy-medium */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder; name = "en_US-amy-medium"; path = "Travel Trivia/Resources/NarratorVoice/en_US-amy-medium"; sourceTree = SOURCE_ROOT; };
-		7B1DF6A6C9A44DA078F4A80C /* sherpa-onnx-combined.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = "sherpa-onnx-combined.xcframework"; path = "Travel Trivia/Vendor/sherpa-onnx-combined.xcframework"; sourceTree = SOURCE_ROOT; };
 		891D48183B0772BFBE6C62C0 /* SherpaOnnx.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SherpaOnnx.swift; path = "Travel Trivia/Vendor/SherpaOnnx.swift"; sourceTree = SOURCE_ROOT; };
 		BCEAF7FB98D112082C67BD42 /* CoreML.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreML.framework; path = System/Library/Frameworks/CoreML.framework; sourceTree = SDKROOT; };
 		FB8D597B218CA7A5F5E44520 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
@@ -46,7 +45,6 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				"Vendor/sherpa-onnx-combined.xcframework",
 				Vendor/SherpaOnnx.swift,
 			);
 			target = 2AD51EC73016A1AD00AEDBE1 /* Travel Trivia */;
@@ -80,7 +78,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7ABA5E0000000000000000B1 /* Supabase in Frameworks */,
-				ACADCC968136DBF0446E3EE0 /* sherpa-onnx-combined.xcframework in Frameworks */,
+				7ABA5E0000000000000000C3 /* SherpaOnnxBinary in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -137,7 +135,6 @@
 			children = (
 				59777616FAA8F48071D6EA06 /* en_US-amy-medium */,
 				891D48183B0772BFBE6C62C0 /* SherpaOnnx.swift */,
-				7B1DF6A6C9A44DA078F4A80C /* sherpa-onnx-combined.xcframework */,
 			);
 			name = NarratorTTSAssets;
 			sourceTree = "<group>";
@@ -163,6 +160,7 @@
 			name = "Travel Trivia";
 			packageProductDependencies = (
 				7ABA5E0000000000000000B2 /* Supabase */,
+				7ABA5E0000000000000000C2 /* SherpaOnnxBinary */,
 			);
 			productName = "Travel Trivia";
 			productReference = 2AD51EC83016A1AD00AEDBE1 /* Travel Trivia.app */;
@@ -244,6 +242,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				7ABA5E0000000000000000B3 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				7ABA5E0000000000000000C1 /* XCLocalSwiftPackageReference "SherpaOnnxVendor" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2AD51EC93016A1AD00AEDBE1 /* Products */;
@@ -686,6 +685,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		7ABA5E0000000000000000C1 /* XCLocalSwiftPackageReference "SherpaOnnxVendor" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = SherpaOnnxVendor;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		7ABA5E0000000000000000B3 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -702,6 +708,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7ABA5E0000000000000000B3 /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		7ABA5E0000000000000000C2 /* SherpaOnnxBinary */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7ABA5E0000000000000000C1 /* XCLocalSwiftPackageReference "SherpaOnnxVendor" */;
+			productName = SherpaOnnxBinary;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
