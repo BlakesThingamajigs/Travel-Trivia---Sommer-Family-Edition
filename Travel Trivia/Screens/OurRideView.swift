@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 struct OurRideView: View {
     @Environment(GameEngine.self) private var engine

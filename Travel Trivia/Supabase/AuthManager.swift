@@ -251,11 +251,31 @@ extension AuthManager: ASWebAuthenticationPresentationContextProviding {
 
 extension AuthManager {
     #if canImport(UIKit)
+    /// Re-resolved fresh on every call (never cached), since Stage Manager
+    /// and Split View can resize or re-key the window between when this
+    /// delegate is registered and when it's actually asked to anchor a
+    /// sheet. Falls through key window -> any window -> a window newly
+    /// attached to a live scene, so we never hand back a disconnected,
+    /// zero-frame anchor (which would present the sign-in sheet off-screen).
     fileprivate static func keyWindow() -> ASPresentationAnchor {
-        UIApplication.shared.connectedScenes
+        let windowScenes = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
+        let windows = windowScenes.flatMap { $0.windows }
+        if let key = windows.first(where: { $0.isKeyWindow }) {
+            return key
+        }
+        if let any = windows.first {
+            return any
+        }
+        guard let scene = windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first else {
+            // Unreachable: this delegate only fires while presenting an auth
+            // sheet from an active scene, so a connected UIWindowScene always
+            // exists here. Asserting (rather than falling back to the
+            // deprecated scene-less UIWindow initializers) means we can
+            // never hand ASAuthorizationController a disconnected anchor.
+            preconditionFailure("AuthManager.keyWindow() called with no connected UIWindowScene")
+        }
+        return UIWindow(windowScene: scene)
     }
     #else
     fileprivate static func keyWindow() -> ASPresentationAnchor {
