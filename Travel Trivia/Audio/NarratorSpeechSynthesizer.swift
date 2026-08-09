@@ -20,6 +20,7 @@
 //
 
 import Foundation
+import os
 
 /// Confines the sherpa-onnx C++ engine (an `OpaquePointer` under the hood,
 /// not Sendable) to one serial queue instead of crossing actor boundaries
@@ -27,6 +28,14 @@ import Foundation
 /// wrappers use for non-Sendable framework types.
 final class NarratorSpeechSynthesizer: @unchecked Sendable {
     static let shared = NarratorSpeechSynthesizer()
+
+    #if DEBUG
+    /// Debug-only: lets Blake confirm on-device (via the Xcode console)
+    /// that narration is really loading the bundled voice model and
+    /// synthesizing audio, not silently falling back to nothing. Compiled
+    /// out of Release builds entirely, so nothing ships to end users.
+    private static let log = Logger(subsystem: "com.blakesthingamajigs.travel-trivia", category: "narrator")
+    #endif
 
     private let queue = DispatchQueue(label: "tt.narrator-tts", qos: .userInitiated)
     private lazy var engine: SherpaOnnxOfflineTtsWrapper? = Self.makeEngine()
@@ -42,6 +51,9 @@ final class NarratorSpeechSynthesizer: @unchecked Sendable {
         return await withCheckedContinuation { continuation in
             queue.async { [self] in
                 guard let engine, let audio = generate(engine, text) else {
+                    #if DEBUG
+                    Self.log.debug("synthesize() produced no audio (engine failed to load, or generation returned 0 samples) — narration will be skipped this time")
+                    #endif
                     continuation.resume(returning: nil)
                     return
                 }
@@ -51,6 +63,10 @@ final class NarratorSpeechSynthesizer: @unchecked Sendable {
                     continuation.resume(returning: nil)
                     return
                 }
+                #if DEBUG
+                let seconds = audio.sampleRate > 0 ? Double(audio.n) / Double(audio.sampleRate) : 0
+                Self.log.debug("synthesized \(String(format: "%.2f", seconds))s of real audio (\(audio.n) samples @ \(audio.sampleRate)Hz) -> \(url.lastPathComponent, privacy: .public)")
+                #endif
                 continuation.resume(returning: url)
             }
         }
@@ -63,6 +79,9 @@ final class NarratorSpeechSynthesizer: @unchecked Sendable {
 
     private static func makeEngine() -> SherpaOnnxOfflineTtsWrapper? {
         guard let modelDir = Bundle.main.url(forResource: "en_US-amy-medium", withExtension: nil) else {
+            #if DEBUG
+            log.debug("narrator voice model 'en_US-amy-medium' not found in app bundle — narration will be silently unavailable")
+            #endif
             return nil
         }
         let model = modelDir.appendingPathComponent("en_US-amy-medium.onnx").path
@@ -70,11 +89,20 @@ final class NarratorSpeechSynthesizer: @unchecked Sendable {
         let dataDir = modelDir.appendingPathComponent("espeak-ng-data").path
         let fm = FileManager.default
         guard fm.fileExists(atPath: model), fm.fileExists(atPath: tokens),
-              fm.fileExists(atPath: dataDir) else { return nil }
+              fm.fileExists(atPath: dataDir) else {
+            #if DEBUG
+            log.debug("narrator voice model directory found but missing model/tokens/espeak-ng-data — narration will be silently unavailable")
+            #endif
+            return nil
+        }
 
         let vits = sherpaOnnxOfflineTtsVitsModelConfig(model: model, tokens: tokens, dataDir: dataDir)
         let modelConfig = sherpaOnnxOfflineTtsModelConfig(vits: vits, numThreads: 2, provider: "cpu")
         var config = sherpaOnnxOfflineTtsConfig(model: modelConfig)
-        return SherpaOnnxOfflineTtsWrapper(config: &config)
+        let wrapper = SherpaOnnxOfflineTtsWrapper(config: &config)
+        #if DEBUG
+        log.debug("narrator voice model loaded: en_US-amy-medium.onnx")
+        #endif
+        return wrapper
     }
 }
